@@ -1,0 +1,5 @@
+# Derleme çıktısı Desktop dışına alınır (bkz. Makefile), yine de:
+.build/
+build/
+*.xcuserstate
+.DS_Store

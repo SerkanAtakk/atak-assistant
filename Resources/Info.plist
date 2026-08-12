@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>tr</string>
+	<key>CFBundleExecutable</key>
+	<string>ATAK</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.serkanatak.atak</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ATAK</string>
+	<key>CFBundleDisplayName</key>
+	<string>ATAK</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSHumanReadableCopyright</key>
+	<string>ATAK Kişisel Asistan</string>
+
+	<!-- İzinler kullanım anında istenir; gerekçeler PermissionManager ile eşleşir. -->
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>ATAK, gününü planlamak ve "cuma öğleden sonra boş muyum?" gibi soruları cevaplamak için takvimini okur. Etkinlik oluşturmak ayrıca onayına tabidir.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>ATAK, görevlerini Hatırlatıcılar ile eşleştirmek için erişim ister.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ATAK ile sesli konuşabilmen için mikrofon gerekir. Sürekli dinleme varsayılan olarak kapalıdır.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Sesli komutlarını metne çevirmek için konuşma tanıma kullanılır.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>ATAK, senin izin verdiğin uygulamaları açmak ve dosyaları göstermek için kullanır.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>ATAK yalnızca senin seçtiğin klasörlerdeki dosyalara erişir.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>ATAK yalnızca senin seçtiğin klasörlerdeki dosyalara erişir.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>ATAK yalnızca senin seçtiğin klasörlerdeki dosyalara erişir.</string>
+</dict>
+</plist>

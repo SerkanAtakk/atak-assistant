@@ -1,0 +1,249 @@
+import Foundation
+import Combine
+
+public struct ToolBadge: Sendable, Identifiable, Equatable {
+    public let id = UUID()
+    public let name: String
+    public let summary: String
+    public let isError: Bool
+}
+
+@MainActor
+public final class ChatViewModel: ObservableObject {
+
+    @Published public private(set) var conversations: [Conversation] = []
+    @Published public private(set) var messages: [ChatMessage] = []
+    @Published public private(set) var activeConversation: Conversation?
+
+    /// Akış sırasında biriken metin — henüz kalıcılaşmamış asistan yanıtı.
+    @Published public private(set) var streamingText = ""
+    @Published public private(set) var liveBadges: [ToolBadge] = []
+    @Published public private(set) var isRunning = false
+    /// Son turun ve bu oturumun token tüketimi — nereye gittiği görünsün diye.
+    @Published public private(set) var lastUsage: AIUsage?
+    @Published public private(set) var sessionUsage = AIUsage()
+
+    @Published public var input = ""
+    @Published public var errorMessage: String?
+
+    private weak var environment: AppEnvironment?
+    private var runTask: Task<Void, Never>?
+    private var hasGreeted = false
+
+    public init() {}
+
+    public func configure(_ environment: AppEnvironment) {
+        guard self.environment == nil else { return }
+        self.environment = environment
+
+        // Konuşma bitince metin doğrudan gönderilir — kullanıcı ayrıca
+        // Enter'a basmak zorunda kalmasın.
+        environment.voice.onFinalTranscript = { [weak self] text in
+            Task { @MainActor in
+                guard let self else { return }
+                self.input = text
+                self.send()
+            }
+        }
+    }
+
+    /// Uygulama açılınca ATAK'ın sesli karşılaması (spec §26).
+    ///
+    /// Yalnız boş bir sohbette ve oturumda bir kez çalışır; ekran değiştirip
+    /// geri gelince tekrar konuşmaz.
+    public func greetIfNeeded() {
+        guard let environment, !hasGreeted else { return }
+        guard environment.voiceSettings.greetOnLaunch else { return }
+        guard activeConversation == nil, visibleMessages.isEmpty else { return }
+
+        hasGreeted = true
+        environment.voice.speak(environment.greeting)
+    }
+
+    public func toggleListening() {
+        guard let environment else { return }
+        Task { await environment.voice.toggleListening() }
+    }
+
+    public var isConfigured: Bool {
+        environment?.aiConfiguration.isReady ?? false
+    }
+
+    public var providerLabel: String {
+        guard let configuration = environment?.aiConfiguration else { return "—" }
+        return "\(configuration.info.displayName) · \(configuration.model)"
+    }
+
+    // MARK: - Yükleme
+
+    public func load() async {
+        guard let service = environment?.conversations else { return }
+        do {
+            conversations = try await service.recent()
+            if activeConversation == nil, let first = conversations.first {
+                await select(first)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func select(_ conversation: Conversation) async {
+        guard let service = environment?.conversations else { return }
+        stop()
+        activeConversation = conversation
+        streamingText = ""
+        liveBadges = []
+        do {
+            messages = try await service.messages(in: conversation.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func startNewConversation() {
+        stop()
+        activeConversation = nil
+        messages = []
+        streamingText = ""
+        liveBadges = []
+    }
+
+    public func delete(_ conversation: Conversation) async {
+        guard let service = environment?.conversations else { return }
+        do {
+            try await service.delete(conversation.id)
+            if activeConversation?.id == conversation.id { startNewConversation() }
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Gönderme
+
+    public func send() {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isRunning, let environment else { return }
+
+        input = ""
+        runTask = Task { await performSend(text, environment: environment) }
+    }
+
+    public func stop() {
+        runTask?.cancel()
+        runTask = nil
+        isRunning = false
+        environment?.voice.stopSpeaking()
+        environment?.agentState = .ready
+    }
+
+    private func performSend(_ text: String, environment: AppEnvironment) async {
+        guard let service = environment.conversations else { return }
+        let isPrivate = environment.aiConfiguration.privateMode
+
+        isRunning = true
+        errorMessage = nil
+        streamingText = ""
+        liveBadges = []
+        defer {
+            isRunning = false
+            environment.agentState = .ready
+        }
+
+        // Motoru mesaj kaydetmeden önce kur; anahtar yoksa boş sohbet kalmasın.
+        let engine: ChatEngine
+        do {
+            engine = try environment.makeChatEngine()
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        // Sohbet yoksa oluştur, başlığı ilk mesajdan türet.
+        let conversation: Conversation
+        if let active = activeConversation {
+            conversation = active
+        } else {
+            do {
+                let created = try await service.create(
+                    title: String(text.prefix(60)),
+                    isPrivate: isPrivate
+                )
+                conversation = created
+                activeConversation = created
+                await load()
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        let userMessage = ChatMessage(conversationID: conversation.id, role: .user, text: text)
+        messages.append(userMessage)
+        try? await service.append(userMessage, isPrivate: isPrivate)
+
+        var turnUsage = AIUsage()
+
+        for await event in engine.run(conversationID: conversation.id, history: messages) {
+            switch event {
+            case .state(let state):
+                environment.agentState = state
+
+            case .usage(let used):
+                // Bir turda birden çok model çağrısı olabilir (araç döngüsü);
+                // hepsi toplanır.
+                turnUsage = turnUsage + used
+                lastUsage = turnUsage
+                sessionUsage = sessionUsage + used
+
+            case .delta(let chunk):
+                streamingText += chunk
+
+            case .message(let message):
+                // Asistan metni akışta zaten gösterildi; kalıcı hâli listeye girince
+                // geçici metni temizle ki çift görünmesin.
+                if message.role == .assistant {
+                    streamingText = ""
+                    // Sesli okuma akış bitince yapılır: parça parça okumak
+                    // kelimeleri bölerdi.
+                    if environment.voiceSettings.speakReplies, !message.text.isEmpty {
+                        environment.voice.speak(message.text)
+                    }
+                }
+                messages.append(message)
+                try? await service.append(message, isPrivate: isPrivate)
+
+            case .toolInvoked(let name, let summary, let isError):
+                liveBadges.append(ToolBadge(name: name, summary: summary, isError: isError))
+
+            case .failed(let message):
+                errorMessage = message
+                environment.agentState = .error(message)
+
+            case .finished:
+                break
+            }
+        }
+
+        await load()
+    }
+
+    // MARK: - Görüntüleme
+
+    public var visibleMessages: [ChatMessage] {
+        messages.filter(\.isVisibleInTranscript)
+    }
+
+    public var isEmpty: Bool {
+        visibleMessages.isEmpty && streamingText.isEmpty && !isRunning
+    }
+
+    /// Boş ekranda gösterilen örnek istekler.
+    public static let suggestions = [
+        "Bugün ne yapmalıyım?",
+        "Yarın 18:00'e spor görevi ekle",
+        "Bu haftayı planlamama yardım et",
+        "Şunu not al: ",
+    ]
+}
