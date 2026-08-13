@@ -20,18 +20,6 @@ public struct NotesView: View {
                 editorColumn
             }
         }
-        .navigationTitle("Notlar")
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    Task { await model.addNote() }
-                } label: {
-                    Label("Yeni not", systemImage: "square.and.pencil")
-                }
-                .help("Yeni not")
-                .keyboardShortcut("n", modifiers: .command)
-            }
-        }
         .task(id: router.section) {
             guard router.section == .notes else { return }
             model.configure(environment)
@@ -65,6 +53,14 @@ public struct NotesView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(theme.surfaceRaised, in: Capsule())
+            Button {
+                Task { await model.addNote() }
+            } label: {
+                Label("Yeni not", systemImage: "square.and.pencil")
+            }
+            .buttonStyle(.atakPrimary)
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .help("Yeni not (⇧⌘N)")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
@@ -72,6 +68,8 @@ public struct NotesView: View {
 
     private var listColumn: some View {
         VStack(spacing: 0) {
+            noteSearchField
+            Hairline()
             List(selection: $model.selectedID) {
                 ForEach(model.notes) { note in
                     VStack(alignment: .leading, spacing: 3) {
@@ -114,7 +112,28 @@ public struct NotesView: View {
                 }
             }
         }
-        .searchable(text: $model.searchText, placement: .sidebar, prompt: "Notlarda ara")
+    }
+
+    private var noteSearchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(theme.textTertiary)
+            TextField("Notlarda ara…", text: $model.searchText)
+                .textFieldStyle(.plain)
+            if !model.searchText.isEmpty {
+                Button {
+                    model.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.textTertiary)
+                .help("Aramayı temizle")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(theme.surface.opacity(0.72))
     }
 
     @ViewBuilder

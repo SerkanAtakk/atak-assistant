@@ -22,7 +22,6 @@ public struct ProjectsView: View {
                 }
             }
         }
-        .navigationTitle("Projeler")
         .task(id: router.section) {
             guard router.section == .projects else { return }
             model.configure(environment)
@@ -63,26 +62,27 @@ public struct ProjectsView: View {
 
     private var listColumn: some View {
         VStack(spacing: 0) {
-            if model.projects.isEmpty {
-                EmptyStateView(
-                    systemImage: "square.stack.3d.up",
-                    title: "İlk projen için hazır",
-                    message: "Bir hedefe isim ver; görevlerini ve ilerlemeni burada birlikte takip edelim."
-                )
-            } else {
-                List(selection: $model.selectedID) {
-                    ForEach(model.projects) { project in
-                        ProjectRow(project: project, progress: model.progress(for: project.id))
-                            .tag(project.id)
-                            .contextMenu {
-                                Button("Sil", role: .destructive) {
-                                    Task { await model.delete(project.id) }
-                                }
+            List(selection: $model.selectedID) {
+                ForEach(model.projects) { project in
+                    ProjectRow(project: project, progress: model.progress(for: project.id))
+                        .tag(project.id)
+                        .contextMenu {
+                            Button("Sil", role: .destructive) {
+                                Task { await model.delete(project.id) }
                             }
-                    }
+                        }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if model.projects.isEmpty {
+                    EmptyStateView(
+                        systemImage: "square.stack.3d.up",
+                        title: "İlk projen için hazır",
+                        message: "Bir hedefe isim ver; görevlerini ve ilerlemeni burada birlikte takip edelim."
+                    )
+                }
             }
 
             Hairline()

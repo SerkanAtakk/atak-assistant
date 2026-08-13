@@ -13,9 +13,13 @@ public final class NotesViewModel: ObservableObject {
 
     @Published public private(set) var notes: [Note] = []
     @Published public var errorMessage: String?
-    @Published public var searchText = "" { didSet { reload() } }
+    @Published public var searchText = "" {
+        didSet { if searchText != oldValue { reload() } }
+    }
 
-    @Published public var selectedID: UUID? { didSet { loadDraft() } }
+    @Published public var selectedID: UUID? {
+        didSet { if selectedID != oldValue { loadDraft() } }
+    }
     @Published public var draft: Note?
     @Published public private(set) var saveState: NoteSaveState = .saved
 
@@ -83,6 +87,12 @@ public final class NotesViewModel: ObservableObject {
     public func addNote() async {
         guard let service else { return }
         do {
+            // Aktif arama yeni boş notu hemen görünmez hâle getirmesin.
+            if !searchText.isEmpty {
+                searchText = ""
+                reloadTask?.cancel()
+                reloadTask = nil
+            }
             let created = try await service.create(title: "", body: "")
             await load()
             selectedID = created.id
@@ -101,14 +111,16 @@ public final class NotesViewModel: ObservableObject {
         let version = stage(snapshot)
         let delay = saveDelay
 
-        saveTasks[snapshot.id] = Task { [weak self] in
+        // Görev snapshot diske gidene kadar modeli yaşatır. Sekme değiştirilip
+        // view bırakıldığında son tuşların sessizce kaybolmasını önler.
+        saveTasks[snapshot.id] = Task { [self] in
             do {
                 try await Task.sleep(for: delay)
             } catch {
                 return
             }
             guard !Task.isCancelled else { return }
-            await self?.persist(snapshot, version: version)
+            await persist(snapshot, version: version)
         }
     }
 

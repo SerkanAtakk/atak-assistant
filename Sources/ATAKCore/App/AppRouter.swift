@@ -12,6 +12,7 @@ public final class AppRouter: ObservableObject {
     @Published public var section: AppSection = .chat
     @Published public var selectedProjectID: UUID?
     @Published public var selectedTaskID: UUID?
+    @Published public var isSidebarVisible = true
     /// Başka bir ekrandan sohbete taşınan taslak. Sohbet ekranı değeri bir
     /// kez tüketir; böylece Dashboard'da yazılan metin kaybolmaz.
     @Published public var pendingChatPrompt: String?
@@ -20,6 +21,10 @@ public final class AppRouter: ObservableObject {
 
     public func select(_ section: AppSection) {
         self.section = section
+    }
+
+    public func toggleSidebar() {
+        isSidebarVisible.toggle()
     }
 
     public func openProject(_ id: UUID) {

@@ -410,27 +410,35 @@ struct EmptyStateView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(theme.textTertiary)
-            Text(title)
-                .font(theme.titleFont(size: 16))
-                .foregroundStyle(theme.textPrimary)
-            Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-                .fixedSize(horizontal: false, vertical: true)
-            if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .buttonStyle(.atakPrimary)
-                    .padding(.top, 2)
+        ZStack {
+            // Sonsuz yükseklik önerisini doğrudan içerik VStack'inden vermek,
+            // List + split-view ölçümünde macOS 27'de yeniden yerleşim döngüsü
+            // oluşturabiliyor. Alanı nötr bir katman doldurur; içerik ideal
+            // boyutunda ortalanır.
+            Color.clear
+
+            VStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(theme.textTertiary)
+                Text(title)
+                    .font(theme.titleFont(size: 16))
+                    .foregroundStyle(theme.textPrimary)
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.atakPrimary)
+                        .padding(.top, 2)
+                }
             }
+            .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 }
 

@@ -10,12 +10,20 @@ public final class ProjectsViewModel: ObservableObject {
     @Published public var errorMessage: String?
 
     @Published public var newProjectName = ""
-    @Published public var selectedID: UUID? { didSet { loadDraftAndTasks() } }
+    @Published public var selectedID: UUID? {
+        didSet {
+            if selectedID != oldValue, !isApplyingLoad {
+                loadDraftAndTasks()
+            }
+        }
+    }
     @Published public var draft: Project?
 
     private var projectService: ProjectService?
     private var taskService: TaskService?
     private weak var router: AppRouter?
+    private var projectTasksTask: Task<Void, Never>?
+    private var isApplyingLoad = false
 
     public init() {}
 
@@ -29,8 +37,12 @@ public final class ProjectsViewModel: ObservableObject {
     public func load() async {
         guard let projectService else { return }
         do {
-            projects = try await projectService.all()
-            progress = try await projectService.progressByProject()
+            let loadedProjects = try await projectService.all()
+            let loadedProgress = try await projectService.progressByProject()
+
+            projects = loadedProjects
+            progress = loadedProgress
+            isApplyingLoad = true
             if let requested = router?.selectedProjectID,
                projects.contains(where: { $0.id == requested }) {
                 selectedID = requested
@@ -38,15 +50,17 @@ public final class ProjectsViewModel: ObservableObject {
             }
             if let selectedID, !projects.contains(where: { $0.id == selectedID }) {
                 self.selectedID = nil
-            } else {
-                loadDraftAndTasks()
             }
+            isApplyingLoad = false
+            loadDraftAndTasks()
         } catch {
+            isApplyingLoad = false
             errorMessage = error.localizedDescription
         }
     }
 
     private func loadDraftAndTasks() {
+        projectTasksTask?.cancel()
         guard let selectedID else {
             draft = nil
             projectTasks = []
@@ -54,12 +68,14 @@ public final class ProjectsViewModel: ObservableObject {
         }
         draft = projects.first { $0.id == selectedID }
 
-        Task { [weak self] in
+        projectTasksTask = Task { [weak self] in
             guard let self, let taskService = self.taskService else { return }
             do {
-                self.projectTasks = try await taskService.list(.project(selectedID))
+                let loadedTasks = try await taskService.list(.project(selectedID))
+                guard !Task.isCancelled, self.selectedID == selectedID else { return }
+                self.projectTasks = loadedTasks
             } catch {
-                self.errorMessage = error.localizedDescription
+                if !Task.isCancelled { self.errorMessage = error.localizedDescription }
             }
         }
     }

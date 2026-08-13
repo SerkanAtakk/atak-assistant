@@ -23,8 +23,6 @@ public struct TasksView: View {
                 }
             }
         }
-        .navigationTitle("Görevler")
-        .searchable(text: $model.searchText, prompt: "Görevlerde ara")
         .task(id: router.section) {
             guard router.section == .tasks else { return }
             model.configure(environment)
@@ -81,38 +79,67 @@ public struct TasksView: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 480)
                 Spacer(minLength: 0)
+                compactSearchField
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
             .background(theme.surface.opacity(0.45))
             Hairline()
 
-            if model.tasks.isEmpty && !model.isLoading {
-                emptyState
-            } else {
-                List(selection: $model.selectedID) {
-                    ForEach(model.tasks) { task in
-                        TaskRow(task: task, model: model)
-                            .tag(task.id)
-                            .contextMenu {
-                                Button(task.status == .done ? "Geri al" : "Tamamlandı") {
-                                    Task { await model.toggleCompleted(task) }
-                                }
-                                Divider()
-                                Button("Sil", role: .destructive) {
-                                    Task { await model.delete(task.id) }
-                                }
+            List(selection: $model.selectedID) {
+                ForEach(model.tasks) { task in
+                    TaskRow(task: task, model: model)
+                        .tag(task.id)
+                        .contextMenu {
+                            Button(task.status == .done ? "Geri al" : "Tamamlandı") {
+                                Task { await model.toggleCompleted(task) }
                             }
-                    }
+                            Divider()
+                            Button("Sil", role: .destructive) {
+                                Task { await model.delete(task.id) }
+                            }
+                        }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if model.tasks.isEmpty && !model.isLoading {
+                    emptyState
+                }
             }
 
             Hairline()
             addBar
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var compactSearchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(theme.textTertiary)
+            TextField("Görevlerde ara…", text: $model.searchText)
+                .textFieldStyle(.plain)
+            if !model.searchText.isEmpty {
+                Button {
+                    model.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.textTertiary)
+                .help("Aramayı temizle")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: 220)
+        .background(theme.surfaceRaised, in: RoundedRectangle(cornerRadius: theme.cornerRadiusTight))
+        .overlay {
+            RoundedRectangle(cornerRadius: theme.cornerRadiusTight)
+                .strokeBorder(theme.hairline, lineWidth: theme.hairlineWidth)
+        }
     }
 
     private var emptyState: some View {

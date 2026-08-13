@@ -35,7 +35,6 @@ public struct SettingsView: View {
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle("Ayarlar")
         .task { model.configure(environment) }
     }
 
