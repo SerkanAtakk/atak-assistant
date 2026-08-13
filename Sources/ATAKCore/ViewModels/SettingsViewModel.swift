@@ -195,14 +195,20 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     /// Sesi ve izinleri tek tıkla dener.
+    ///
+    /// Konuşma (çıkış) hiçbir izin istemez; yalnız dinleme (giriş) mikrofon ve
+    /// konuşma tanıma izni ister. Bu yüzden önce konuşulur: mikrofon reddedilmiş
+    /// olsa bile kullanıcı sesin çalıştığını duyar, aksi hâlde "ses hiç yok"
+    /// sanır.
     public func testVoice() async {
         guard let environment else { return }
-        let granted = await environment.voice.requestAuthorization()
-        if granted {
-            environment.voice.speak(environment.greeting)
-            notice = "Sesi duyuyorsan her şey hazır."
+        environment.voice.speak(environment.greeting)
+
+        if await environment.voice.requestAuthorization() {
+            notice = "Sesi duyuyorsan her şey hazır — mikrofon da açık."
         } else {
-            testFailure = environment.voice.availability.message ?? "Ses izni alınamadı."
+            notice = "Ses çalışıyor. Mikrofon ise kapalı: "
+                + (environment.voice.availability.message ?? "izin alınamadı.")
         }
     }
 
