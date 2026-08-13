@@ -349,6 +349,39 @@ struct TaskTests {
         #expect(counts.overdue >= 1)
     }
 
+    /// "yarın neler var" sorusu bu filtre olmadan cevapsız kalıyordu.
+    @Test("Yarın filtresi yalnız yarına düşenleri verir")
+    func tomorrowFilterIsScopedToTomorrow() async throws {
+        let context = try await TestDatabase()
+        let service = TaskService(database: context.database)
+
+        let bounds = TaskService.todayBounds()
+        let todayNoon = bounds.start.addingTimeInterval(12 * 3600)
+        let tomorrowNoon = bounds.end.addingTimeInterval(12 * 3600)
+        let dayAfter = bounds.end.addingTimeInterval(36 * 3600)
+
+        _ = try await service.create(title: "bugün", dueAt: todayNoon)
+        let tomorrow = try await service.create(title: "yarın", dueAt: tomorrowNoon)
+        _ = try await service.create(title: "öbür gün", dueAt: dayAfter)
+        _ = try await service.create(title: "tarihsiz")
+
+        let result = try await service.list(.tomorrow)
+        #expect(result.count == 1)
+        #expect(result.first?.id == tomorrow.id)
+    }
+
+    @Test("Yarın filtresi tamamlananları dışarıda bırakır")
+    func tomorrowFilterExcludesCompleted() async throws {
+        let context = try await TestDatabase()
+        let service = TaskService(database: context.database)
+
+        let tomorrowNoon = TaskService.todayBounds().end.addingTimeInterval(12 * 3600)
+        let done = try await service.create(title: "yarın ama bitti", dueAt: tomorrowNoon)
+        try await service.setCompleted(done.id, true)
+
+        #expect(try await service.list(.tomorrow).isEmpty)
+    }
+
     @Test("Aciliyet skoru gecikmiş işi öne alır")
     func urgencyPrefersOverdue() {
         let overdue = TaskItem(title: "gecikmiş", priority: .normal, dueAt: Date().addingTimeInterval(-3600))

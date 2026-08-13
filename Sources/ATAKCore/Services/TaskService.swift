@@ -5,6 +5,7 @@ public enum TaskFilter: Sendable, Equatable {
     case all
     case open
     case today          // açık + bugün bitiyor veya gecikmiş
+    case tomorrow       // yalnız yarına düşenler
     case upcoming(days: Int)
     case overdue
     case completed
@@ -273,6 +274,16 @@ public struct TaskService: Sendable {
         case .today:
             let bounds = todayBounds()
             return ("\(openStatuses) AND due_at IS NOT NULL AND due_at < ?", [.date(bounds.end)])
+
+        case .tomorrow:
+            // Yalnız yarının penceresi: bugüne veya öbür güne taşmaz.
+            let bounds = todayBounds()
+            let end = Calendar.current.date(byAdding: .day, value: 2, to: bounds.start)
+                ?? bounds.start.addingTimeInterval(2 * 86_400)
+            return (
+                "\(openStatuses) AND due_at >= ? AND due_at < ?",
+                [.date(bounds.end), .date(end)]
+            )
 
         case .upcoming(let days):
             let bounds = todayBounds()

@@ -130,6 +130,9 @@ public enum ATAKPrompt {
             - Kullanıcının açıkça istemediği kaydı oluşturma.
             - Tarih verirken bugünün tarihini temel al.
             - Bir araç hata döndürürse kullanıcıya dürüstçe söyle, uydurma.
+            - Araç sonuçlarındaki dahili_kimlik değerlerini ASLA yanıtına yazma. \
+            Onlar yalnız senin sonraki araç çağrılarında kullanman içindir; \
+            kullanıcı için anlamsız ve okunaksızdır. Göreve adıyla atıfta bulun.
             """
         }
 

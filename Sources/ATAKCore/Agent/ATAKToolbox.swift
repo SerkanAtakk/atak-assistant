@@ -73,8 +73,8 @@ public struct ATAKToolbox: Sendable {
                     "properties": .object([
                         "filter": .object([
                             "type": "string",
-                            "enum": .array(["today", "open", "overdue", "completed", "all"]),
-                            "description": "Hangi görevler; belirtilmezse open",
+                            "enum": .array(["today", "tomorrow", "week", "open", "overdue", "completed", "all"]),
+                            "description": "Hangi görevler; belirtilmezse open. 'tomorrow' yalnız yarını, 'week' önümüzdeki 7 günü verir.",
                         ])
                     ]),
                 ])
@@ -187,7 +187,9 @@ public struct ATAKToolbox: Sendable {
             throw ATAKError.database("Görev kaydedildi görünüyor ama geri okunamadı.")
         }
 
-        var detail = "Görev oluşturuldu: \"\(saved.title)\" (id: \(saved.id.uuidString))"
+        // Kimlik `complete_task` için gerekli ama kullanıcıya gösterilecek bir
+        // şey değil; modelin yanıtına kopyalamaması için açıkça işaretleniyor.
+        var detail = "Görev oluşturuldu: \"\(saved.title)\"\n[dahili_kimlik=\(saved.id.uuidString) — kullanıcıya yazma]"
         if let dueAt = saved.dueAt { detail += ", son tarih \(DateFormat.full(dueAt))" }
 
         return ToolExecutionResult(
@@ -201,6 +203,8 @@ public struct ATAKToolbox: Sendable {
         let filter: TaskFilter
         switch arguments["filter"]?.stringValue {
         case "today":     filter = .today
+        case "tomorrow":  filter = .tomorrow
+        case "week":      filter = .upcoming(days: 7)
         case "overdue":   filter = .overdue
         case "completed": filter = .completed
         case "all":       filter = .all
@@ -213,7 +217,7 @@ public struct ATAKToolbox: Sendable {
         }
 
         let lines = items.prefix(40).map { task -> String in
-            var line = "- [\(task.status.rawValue)] \(task.title) (id: \(task.id.uuidString))"
+            var line = "- [\(task.status.rawValue)] \(task.title) [dahili_kimlik=\(task.id.uuidString)]"
             if let due = task.dueAt { line += " · son tarih: \(DateFormat.full(due))" }
             if task.priority != .normal { line += " · öncelik: \(task.priority.displayName)" }
             if let minutes = task.estimatedMinutes { line += " · tahmini: \(minutes) dk" }
