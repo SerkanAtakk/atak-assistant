@@ -170,6 +170,9 @@ public final class ChatViewModel: ObservableObject {
         undoCandidate = nil
         streamingText = ""
         liveBadges = []
+        // Geri alma adayı bu ana göre süzülür; önceki turların işleri
+        // bu turun şeridinde görünmemeli.
+        let turnStartedAt = Date()
         defer {
             isRunning = false
             environment.agentState = .ready
@@ -262,12 +265,13 @@ public final class ChatViewModel: ObservableObject {
         // mesajlar ve metadata bellekte bırakılır, veritabanına dokunulmaz.
         if !isPrivate { await load() }
 
-        // Geri alma yalnız bu turda gerçekten bir iş yapıldıysa önerilir;
-        // sohbet boyunca duran kalıcı bir düğme, kullanıcının ne geri
-        // alacağını bilmeden basmasına yol açardı.
+        // Geri alma yalnız bu turda gerçekten bir iş yapıldıysa önerilir.
+        // Rozetin varlığı yetmez: turda sadece okuma aracı çalışmış olabilir,
+        // o zaman aday sorgusu önceki turlardan bir işi bu turunkiymiş gibi
+        // önerirdi. Bu yüzden tur başlangıcına göre süzülüyor.
         undoCandidate = liveBadges.isEmpty
             ? nil
-            : try? await environment.undo?.candidate()
+            : try? await environment.undo?.candidate(since: turnStartedAt)
     }
 
     /// Sohbetteki "Geri al" şeridi.

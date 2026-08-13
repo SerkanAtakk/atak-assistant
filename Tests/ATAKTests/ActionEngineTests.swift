@@ -451,3 +451,116 @@ struct FocusTimerTests {
         #expect(try await service.focusedMinutesToday() == 0)
     }
 }
+
+// MARK: - Özel oturum ve denetim defteri
+
+@Suite("Özel oturumda denetim ve geri alma")
+struct PrivateModeActionTests {
+
+    /// Bulunan hata: özel oturumda sohbet satırı veritabanına yazılmadığı için
+    /// denetim kaydı ona bağlanamıyor, yabancı anahtar ihlaliyle sessizce
+    /// düşüyordu. Sonuç: özel oturumda yapılan iş deftere hiç girmiyor ve
+    /// geri alınamıyordu — oysa aracın oluşturduğu görev diskte duruyordu.
+    @Test("Sohbete bağlanmamış iş yine de deftere girer")
+    func actionWithoutConversationIsLogged() async throws {
+        let context = try await TestDatabase()
+        let log = ActionLogService(database: context.database)
+        let toolbox = ATAKToolbox(
+            tasks: TaskService(database: context.database),
+            notes: NoteService(database: context.database),
+            projects: ProjectService(database: context.database),
+            actionLog: log
+        )
+
+        _ = await toolbox.execute(
+            AIToolCall(id: "1", name: "create_task", arguments: .object(["title": "özel görev"])),
+            conversationID: nil
+        )
+
+        let entries = try await log.recent()
+        #expect(entries.count == 1)
+        #expect(entries.first?.conversationID == nil)
+        #expect(entries.first?.isUndoable == true)
+    }
+
+    /// Var olmayan bir sohbet kimliği verilirse kayıt düşer. ChatEngine özel
+    /// oturumda `nil` geçerek bunu engelliyor; bu test o sözleşmeyi koruyor.
+    @Test("Var olmayan sohbete bağlı kayıt deftere giremez")
+    func danglingConversationIsRejected() async throws {
+        let context = try await TestDatabase()
+        let log = ActionLogService(database: context.database)
+        let toolbox = ATAKToolbox(
+            tasks: TaskService(database: context.database),
+            notes: NoteService(database: context.database),
+            projects: ProjectService(database: context.database),
+            actionLog: log
+        )
+
+        _ = await toolbox.execute(
+            AIToolCall(id: "1", name: "create_task", arguments: .object(["title": "hayalet"])),
+            conversationID: UUID()
+        )
+
+        #expect(try await log.recent().isEmpty)
+    }
+}
+
+// MARK: - Geri alma penceresi
+
+@Suite("Geri alma zaman penceresi")
+struct UndoWindowTests {
+
+    /// Sohbetteki şerit turun başlangıcını veriyor. Bu süzgeç olmasaydı,
+    /// turda yalnız okuma aracı çalışmış olsa bile önceki bir turun işi
+    /// "bu turda yapıldı" gibi önerilirdi.
+    @Test("Tur başlangıcından önceki iş aday olmaz")
+    func earlierActionIsNotOffered() async throws {
+        let context = try await TestDatabase()
+        let tasks = TaskService(database: context.database)
+        let notes = NoteService(database: context.database)
+        let projects = ProjectService(database: context.database)
+        let memory = MemoryService(database: context.database)
+        let log = ActionLogService(database: context.database)
+
+        let toolbox = ATAKToolbox(tasks: tasks, notes: notes, projects: projects, actionLog: log)
+        let undo = UndoService(
+            log: log, tasks: tasks, notes: notes, projects: projects,
+            memory: memory, calendar: CalendarService()
+        )
+
+        _ = await toolbox.execute(AIToolCall(
+            id: "1", name: "create_task", arguments: .object(["title": "eski tur"])
+        ))
+
+        // Sonraki turun başlangıcı: az önceki işten sonra.
+        let laterTurn = Date().addingTimeInterval(1)
+
+        #expect(try await undo.candidate(since: laterTurn) == nil)
+        // Süzgeçsiz sorgu onu hâlâ bulabilmeli — kayıt kaybolmuş değil.
+        #expect(try await undo.candidate() != nil)
+    }
+
+    @Test("Tur içinde yapılan iş aday olur")
+    func actionInsideTurnIsOffered() async throws {
+        let context = try await TestDatabase()
+        let tasks = TaskService(database: context.database)
+        let notes = NoteService(database: context.database)
+        let projects = ProjectService(database: context.database)
+        let memory = MemoryService(database: context.database)
+        let log = ActionLogService(database: context.database)
+
+        let toolbox = ATAKToolbox(tasks: tasks, notes: notes, projects: projects, actionLog: log)
+        let undo = UndoService(
+            log: log, tasks: tasks, notes: notes, projects: projects,
+            memory: memory, calendar: CalendarService()
+        )
+
+        let turnStart = Date().addingTimeInterval(-1)
+        _ = await toolbox.execute(AIToolCall(
+            id: "1", name: "create_note", arguments: .object(["body": "bu turda"])
+        ))
+
+        let candidate = try #require(try await undo.candidate(since: turnStart))
+        #expect(candidate.undo?.label == "bu turda")
+    }
+}

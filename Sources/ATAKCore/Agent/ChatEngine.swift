@@ -174,7 +174,15 @@ public struct ChatEngine: Sendable {
                 toolCallsUsed += 1
 
                 emit(.state(.working(tool: Self.friendlyName(call.name))))
-                let result = await toolbox.execute(call, conversationID: conversationID)
+                // Özel oturumda sohbet satırı veritabanına hiç yazılmaz; denetim
+                // kaydını ona bağlamak yabancı anahtar ihlaline yol açar ve kayıt
+                // sessizce düşerdi (geri alma da bu yüzden çalışmazdı). İş yine
+                // deftere girer, yalnız bir sohbete bağlanmaz — araçların diske
+                // yazdığı görev/not zaten kalıcı olduğu için bu ek bir ifşa değil.
+                let result = await toolbox.execute(
+                    call,
+                    conversationID: configuration.privateMode ? nil : conversationID
+                )
 
                 emit(.toolInvoked(
                     name: Self.friendlyName(call.name),

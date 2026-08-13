@@ -32,8 +32,11 @@ public struct UndoService: Sendable {
     }
 
     /// Geri alınabilecek son iş — arayüzde "Geri al" düğmesinin metni buradan.
-    public func candidate() async throws -> AssistantAction? {
-        try await log.lastUndoable()
+    ///
+    /// - Parameter since: Sohbet şeridi turun başlangıcını verir; böylece
+    ///   yalnız o turda olan bir iş önerilir.
+    public func candidate(since: Date? = nil) async throws -> AssistantAction? {
+        try await log.lastUndoable(since: since)
     }
 
     /// Verilen işi geri alır ve defterde işaretler.

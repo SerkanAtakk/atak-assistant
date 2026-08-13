@@ -54,14 +54,20 @@ public struct ActionLogService: Sendable {
     /// Geri alınmış bir iş bir daha geri alınamamalı; bunun için kayıt
     /// silinmiyor, `status` alanı `cancelled`'a çekiliyor — defter tarihî
     /// kayıt olduğu için geçmiş asla silinmez.
-    public func lastUndoable() async throws -> AssistantAction? {
+    ///
+    /// - Parameter since: Verilirse yalnız bu andan sonraki işler aday olur.
+    ///   Sohbetteki "Geri al" şeridi bunu kullanır: kullanıcı o an ne olduğunu
+    ///   gördüğü işi geri alır, üç tur önce olmuş bir şeyi değil.
+    public func lastUndoable(since: Date? = nil) async throws -> AssistantAction? {
         let rows = try await database.query(
             """
             SELECT * FROM assistant_action
             WHERE status = 'succeeded' AND output_json IS NOT NULL
+              AND started_at >= ?
             ORDER BY started_at DESC
             LIMIT 20;
-            """
+            """,
+            [.date(since ?? Date.distantPast)]
         )
         return rows.compactMap(Self.action(from:)).first(where: \.isUndoable)
     }
