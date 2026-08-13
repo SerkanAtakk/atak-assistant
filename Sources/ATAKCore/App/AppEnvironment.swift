@@ -20,6 +20,9 @@ public final class AppEnvironment: ObservableObject {
 
     public let router = AppRouter()
     public let voice = VoiceService()
+    /// Riskli araçların beklediği onay kapısı (MIMARI §8).
+    public let consentGate = ConsentGate()
+    public let focusTimer = FocusTimer()
 
     /// "Günaydın Serkan, ne yapıyoruz?"
     public var greeting: String {
@@ -37,7 +40,15 @@ public final class AppEnvironment: ObservableObject {
     public private(set) var notes: NoteService?
     public private(set) var conversations: ConversationService?
     public private(set) var preferences: PreferencesService?
+    public private(set) var memory: MemoryService?
+    public private(set) var actionLog: ActionLogService?
+    public private(set) var timerSessions: TimerSessionService?
+    public private(set) var undo: UndoService?
     public private(set) var toolbox: ATAKToolbox?
+
+    /// Takvim erişimi. İzin istenene kadar hiçbir şey yapmaz — nesnenin
+    /// varlığı TCC'yi tetiklemez.
+    public let calendar = CalendarService()
 
     /// Devam eden başlatma işi. Birden fazla çağıran aynı işi bekler.
     private var bootstrapTask: Task<Void, Never>?
@@ -79,6 +90,9 @@ public final class AppEnvironment: ObservableObject {
             let projects = ProjectService(database: database)
             let notes = NoteService(database: database)
             let preferences = PreferencesService(database: database)
+            let memory = MemoryService(database: database)
+            let actionLog = ActionLogService(database: database)
+            let timerSessions = TimerSessionService(database: database)
 
             self.database = database
             self.tasks = tasks
@@ -86,7 +100,25 @@ public final class AppEnvironment: ObservableObject {
             self.notes = notes
             self.conversations = ConversationService(database: database)
             self.preferences = preferences
-            self.toolbox = ATAKToolbox(tasks: tasks, notes: notes, projects: projects)
+            self.memory = memory
+            self.actionLog = actionLog
+            self.timerSessions = timerSessions
+            self.undo = UndoService(
+                log: actionLog, tasks: tasks, notes: notes, projects: projects,
+                memory: memory, calendar: calendar
+            )
+            focusTimer.configure(timerSessions)
+
+            self.toolbox = ATAKToolbox(
+                tasks: tasks,
+                notes: notes,
+                projects: projects,
+                memory: memory,
+                calendar: calendar,
+                timer: FocusTimerProxy(focusTimer),
+                actionLog: actionLog,
+                consent: ConsentGateBridge(consentGate)
+            )
 
             if let stored = try await preferences.decode(AIConfiguration.self, for: PreferenceKey.aiConfiguration) {
                 let repaired = Self.repairingRetiredModel(stored)
@@ -201,17 +233,27 @@ public final class AppEnvironment: ObservableObject {
     // MARK: - AI
 
     /// Mevcut ayarlarla çalışır bir sohbet motoru üretir.
-    public func makeChatEngine() throws -> ChatEngine {
+    ///
+    /// Hafıza özeti burada okunuyor: her turda güncel olmalı, çünkü kullanıcı
+    /// sohbetin ortasında bir şey hatırlatmış olabilir. Özel oturumda hafıza
+    /// hiç gönderilmez (MIMARI §8).
+    public func makeChatEngine() async throws -> ChatEngine {
         let key = Keychain.get(Keychain.account(for: aiConfiguration.providerID))
         let provider = try AIProviderCatalog.makeProvider(
             for: aiConfiguration.providerID,
             apiKey: key,
             baseURLOverride: aiConfiguration.baseURLOverride
         )
+
+        let digest = aiConfiguration.privateMode
+            ? ""
+            : ((try? await memory?.promptDigest()) ?? "")
+
         return ChatEngine(
             provider: provider,
             configuration: aiConfiguration,
-            toolbox: aiConfiguration.allowTools ? toolbox : nil
+            toolbox: aiConfiguration.allowTools ? toolbox : nil,
+            memoryDigest: digest
         )
     }
 

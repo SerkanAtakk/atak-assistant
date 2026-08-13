@@ -101,20 +101,8 @@ public struct NoteService: Sendable {
 
     // MARK: - FTS sorgu temizliği
 
-    /// Kullanıcı metnini güvenli bir FTS5 MATCH ifadesine çevirir.
-    ///
-    /// Tırnak kaçışı yapılmazsa `"` içeren arama FTS5 sözdizimini bozar;
-    /// her terim tırnaklanır ve önek araması için `*` eklenir.
+    /// Hafıza araması da aynı kuralı kullanıyor; ortak hâli `FTS.query`.
     static func ftsQuery(from input: String) -> String? {
-        let terms = input
-            .components(separatedBy: .whitespacesAndNewlines)
-            .map { $0.trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.symbols)) }
-            .filter { !$0.isEmpty }
-
-        guard !terms.isEmpty else { return nil }
-
-        return terms
-            .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"*" }
-            .joined(separator: " ")
+        FTS.query(from: input)
     }
 }

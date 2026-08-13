@@ -84,6 +84,11 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(environment)
             .environmentObject(environment.router)
             .environmentObject(environment.voice)
+            // Onay kapısı ve zamanlayıcı kendi `ObservableObject`'leri;
+            // `AppEnvironment` üzerinden okunsalardı değişimleri arayüze
+            // yansımazdı (iç içe gözlemlenebilir nesneler yayınlamaz).
+            .environmentObject(environment.consentGate)
+            .environmentObject(environment.focusTimer)
         let hostingView = NSHostingView(rootView: root)
         // NSHostingView'ın hedef ekranın ideal yüksekliğini pencereye dayatması
         // Ayarlar/Notlar gibi uzun yüzeylerde pencereyi büyütüyordu. İçerik
@@ -197,7 +202,10 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
             (.tasks, "3"),
             (.projects, "4"),
             (.notes, "5"),
-            (.settings, "6"),
+            (.calendar, "6"),
+            (.focus, "7"),
+            (.memory, "8"),
+            (.settings, "9"),
         ]
         for (section, keyEquivalent) in destinations {
             let item = addItem(
@@ -213,9 +221,10 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
         addItem(
             to: viewMenu,
             title: "Kenar Çubuğunu Göster/Gizle",
-            action: #selector(NSSplitViewController.toggleSidebar(_:)),
+            action: #selector(toggleSidebar),
             keyEquivalent: "s",
-            modifiers: [.command, .control]
+            modifiers: [.command, .control],
+            target: self
         )
         addItem(
             to: viewMenu,
@@ -353,6 +362,10 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showMainWindow() { openMainWindow() }
 
+    @objc private func toggleSidebar() {
+        environment.router.toggleSidebar()
+    }
+
     @objc private func showSection(_ sender: NSMenuItem) {
         guard
             let rawValue = sender.representedObject as? String,
@@ -433,6 +446,6 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 public enum AppInfo {
-    public static let version = "0.2.0"
+    public static let version = "0.3.0"
     public static let bundleIdentifier = "com.serkanatak.atak"
 }

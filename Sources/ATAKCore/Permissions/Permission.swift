@@ -61,6 +61,25 @@ public enum Permission: String, Sendable, CaseIterable, Codable {
         }
     }
 
+    /// İzin reddedilmişse kullanıcının onu nereden açacağı.
+    ///
+    /// macOS bir izni bir kez reddettikten sonra uygulamanın tekrar sorma
+    /// hakkı yoktur; bu yüzden hata mesajının kendisi yol tarif etmeli.
+    public var settingsHint: String? {
+        guard isSystemLevel else { return nil }
+        let pane: String
+        switch self {
+        case .calendar:          pane = "Takvimler"
+        case .reminders:         pane = "Hatırlatıcılar"
+        case .microphone:        pane = "Mikrofon"
+        case .speechRecognition: pane = "Konuşma Tanıma"
+        case .notifications:     pane = "Bildirimler"
+        case .automation:        pane = "Otomasyon"
+        default:                 return nil
+        }
+        return "Sistem Ayarları → Gizlilik ve Güvenlik → \(pane) bölümünden ATAK'a izin verebilirsin."
+    }
+
     /// macOS'un kendi izin sistemine (TCC) karşılık geliyor mu?
     public var isSystemLevel: Bool {
         switch self {

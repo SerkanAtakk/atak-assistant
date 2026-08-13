@@ -39,17 +39,21 @@ public struct ChatEngine: Sendable {
     private let configuration: AIConfiguration
     private let toolbox: ATAKToolbox?
     private let budget: AgentBudget
+    /// Kullanıcı hakkında hatırlananların özeti; sistem promptuna eklenir.
+    private let memoryDigest: String
 
     public init(
         provider: any AIProvider,
         configuration: AIConfiguration,
         toolbox: ATAKToolbox?,
-        budget: AgentBudget = .default
+        budget: AgentBudget = .default,
+        memoryDigest: String = ""
     ) {
         self.provider = provider
         self.configuration = configuration
         self.toolbox = toolbox
         self.budget = budget
+        self.memoryDigest = memoryDigest
     }
 
     public func run(
@@ -96,7 +100,7 @@ public struct ChatEngine: Sendable {
 
             let request = AIRequest(
                 model: configuration.model,
-                system: ATAKPrompt.system(toolsEnabled: useTools),
+                system: ATAKPrompt.system(toolsEnabled: useTools, memoryDigest: memoryDigest),
                 messages: conversation,
                 tools: specs,
                 maxTokens: configuration.maxTokens,
@@ -170,7 +174,7 @@ public struct ChatEngine: Sendable {
                 toolCallsUsed += 1
 
                 emit(.state(.working(tool: Self.friendlyName(call.name))))
-                let result = await toolbox.execute(call)
+                let result = await toolbox.execute(call, conversationID: conversationID)
 
                 emit(.toolInvoked(
                     name: Self.friendlyName(call.name),
@@ -213,15 +217,12 @@ public struct ChatEngine: Sendable {
         return window
     }
 
+    /// Araç adının kullanıcıya gösterilen hâli.
+    ///
+    /// Ad ve risk künyesi aynı tabloda duruyor (`ATAKToolbox.safety`); ikisini
+    /// ayrı listelerde tutmak, yeni araç eklendiğinde birinin unutulması
+    /// demekti.
     static func friendlyName(_ toolName: String) -> String {
-        switch toolName {
-        case "create_task":    return "görev oluşturma"
-        case "list_tasks":     return "görevleri okuma"
-        case "complete_task":  return "görev tamamlama"
-        case "create_note":    return "not kaydetme"
-        case "search_notes":   return "notlarda arama"
-        case "create_project": return "proje oluşturma"
-        default:               return toolName
-        }
+        ATAKToolbox.safety(for: toolName)?.friendlyName ?? toolName
     }
 }

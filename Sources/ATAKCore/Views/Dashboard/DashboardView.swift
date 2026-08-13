@@ -25,6 +25,7 @@ public struct DashboardView: View {
                     suggestionPanel(suggestion)
                 }
 
+                calendarPanel
                 projectsPanel
                 askPanel
             }
@@ -33,7 +34,6 @@ public struct DashboardView: View {
             .frame(maxWidth: 980, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .navigationTitle("Bugün")
         .task(id: router.section) {
             guard router.section == .dashboard else { return }
             model.configure(environment)
@@ -92,6 +92,14 @@ public struct DashboardView: View {
                 systemImage: model.overdueCount == 0 ? "checkmark.shield" : "exclamationmark.triangle",
                 tint: model.overdueCount == 0 ? theme.success : theme.danger
             ) { router.select(.tasks) }
+
+            DashboardMetricCard(
+                value: "\(model.focusedMinutesToday)",
+                label: "Odak dakikası",
+                detail: model.focusedMinutesToday == 0 ? "Bugün henüz yok" : "Bugün toplam",
+                systemImage: "timer",
+                tint: theme.accent
+            ) { router.select(.focus) }
         }
         .redacted(reason: model.isLoading ? .placeholder : [])
     }
@@ -205,6 +213,36 @@ public struct DashboardView: View {
         }
         .padding(17)
         .panel(raised: true, accented: true)
+    }
+
+    /// Bugünün takvimi. İzin verilmemişse hiç çizilmez — panoyu kalıcı bir
+    /// "izin ver" çağrısına çevirmek, her gün görülen bir ekranda yorucu olur.
+    @ViewBuilder
+    private var calendarPanel: some View {
+        if !model.todayEvents.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionTitle("Bugün takvimde", detail: "\(model.todayEvents.count) etkinlik")
+                VStack(spacing: 1) {
+                    ForEach(model.todayEvents.prefix(5)) { event in
+                        HStack(spacing: 12) {
+                            Text(event.isAllDay ? "tüm gün" : DateFormat.time(event.startsAt))
+                                .font(theme.numericFont(size: 11.5))
+                                .foregroundStyle(theme.accent)
+                                .frame(width: 62, alignment: .leading)
+                            Text(event.title)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(theme.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                    }
+                }
+                .panel()
+                .onTapGesture { router.select(.calendar) }
+            }
+        }
     }
 
     @ViewBuilder

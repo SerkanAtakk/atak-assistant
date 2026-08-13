@@ -10,6 +10,10 @@ public final class DashboardViewModel: ObservableObject {
     @Published public private(set) var overdueCount = 0
     @Published public private(set) var activeProjects: [Project] = []
     @Published public private(set) var suggestion: String?
+    /// Bugünün takvim etkinlikleri. Takvim izni yoksa boş kalır — pano
+    /// bu yüzden hata göstermez, o bölüm hiç çizilmez.
+    @Published public private(set) var todayEvents: [CalendarEvent] = []
+    @Published public private(set) var focusedMinutesToday = 0
     @Published public private(set) var isLoading = false
     @Published public var errorMessage: String?
 
@@ -17,6 +21,7 @@ public final class DashboardViewModel: ObservableObject {
 
     private var taskService: TaskService?
     private var projectService: ProjectService?
+    private weak var environment: AppEnvironment?
 
     public init() {}
 
@@ -24,6 +29,7 @@ public final class DashboardViewModel: ObservableObject {
         guard taskService == nil else { return }
         taskService = environment.tasks
         projectService = environment.projects
+        self.environment = environment
     }
 
     public func load() async {
@@ -38,6 +44,9 @@ public final class DashboardViewModel: ObservableObject {
             overdueCount = counts.overdue
             topTasks = try await taskService.topPriorities(limit: 3)
             activeProjects = try await projectService?.all().filter { $0.status == .active } ?? []
+            focusedMinutesToday = (try? await environment?.timerSessions?.focusedMinutesToday()) ?? 0
+            // Takvim isteğe bağlı: izin verilmemişse pano yine tam çalışır.
+            todayEvents = (try? await environment?.calendar.eventsToday()) ?? []
             suggestion = makeSuggestion()
         } catch {
             errorMessage = error.localizedDescription

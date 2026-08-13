@@ -33,7 +33,11 @@ public enum ATAKError: Error, LocalizedError, Sendable {
         case .validation(let message):
             return message
         case .permissionDenied(let permission):
-            return "Bu işlem için '\(permission.displayName)' izni gerekiyor."
+            // Kullanıcıya yalnız "izin yok" demek onu çıkmaza sokar; iznin
+            // nereden verildiği de söylenir.
+            var message = "Bu işlem için '\(permission.displayName)' izni gerekiyor."
+            if let hint = permission.settingsHint { message += "\n\(hint)" }
+            return message
         case .consentRequired:
             return "Bu işlem onayını bekliyor."
         case .budgetExceeded(let detail):

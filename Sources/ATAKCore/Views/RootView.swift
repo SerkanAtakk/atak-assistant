@@ -12,13 +12,20 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 210, ideal: 224, max: 280)
-        } detail: {
+        HStack(spacing: 0) {
+            if router.isSidebarVisible {
+                SidebarView()
+                    .frame(width: 224)
+
+                Rectangle()
+                    .fill(environment.theme.hairline)
+                    .frame(width: environment.theme.hairlineWidth)
+            }
+
             content
+                .id(router.section)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
         .environment(\.atakTheme, environment.theme)
         .tint(environment.theme.accent)
         .task {
@@ -47,15 +54,9 @@ public struct RootView: View {
         case .projects:  ProjectsView().atakBackground()
         case .notes:     NotesView().atakBackground()
         case .settings:  SettingsView().atakBackground()
-        case .calendar:
-            ComingSoonView(section: .calendar, note: "Takvim bağlantısı sonraki sürümler için hazırlanıyor.")
-                .atakBackground()
-        case .focus:
-            ComingSoonView(section: .focus, note: "Odak seansları sonraki sürümler için hazırlanıyor.")
-                .atakBackground()
-        case .memory:
-            ComingSoonView(section: .memory, note: "Hafıza yönetimi hazır olduğunda burada görünecek.")
-                .atakBackground()
+        case .calendar:  CalendarView().atakBackground()
+        case .focus:     FocusView().atakBackground()
+        case .memory:    MemoryView().atakBackground()
         }
     }
 }
@@ -208,16 +209,5 @@ struct StartupFailureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .atakBackground()
-    }
-}
-
-struct ComingSoonView: View {
-    @Environment(\.atakTheme) private var theme
-    let section: AppSection
-    let note: String
-
-    var body: some View {
-        EmptyStateView(systemImage: section.systemImage, title: section.title, message: note)
-            .navigationTitle(section.title)
     }
 }

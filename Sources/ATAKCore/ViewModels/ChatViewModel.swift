@@ -25,6 +25,10 @@ public final class ChatViewModel: ObservableObject {
 
     @Published public var input = ""
     @Published public var errorMessage: String?
+    /// Bu turda geri alınabilecek son iş. Tur bitince doldurulur.
+    @Published public private(set) var undoCandidate: AssistantAction?
+    /// Kısa onay bildirimi ("Geri alındı: …").
+    @Published public private(set) var notice: String?
 
     private weak var environment: AppEnvironment?
     private var runTask: Task<Void, Never>?
@@ -150,6 +154,9 @@ public final class ChatViewModel: ObservableObject {
         runTask = nil
         isRunning = false
         environment?.voice.stopSpeaking()
+        // Ekranda bekleyen bir onay kartı varsa serbest bırakılmalı: aksi
+        // hâlde araç sonsuza kadar cevap bekler ve kart ekranda asılı kalır.
+        environment?.consentGate.cancelPending()
         environment?.agentState = .ready
     }
 
@@ -159,6 +166,8 @@ public final class ChatViewModel: ObservableObject {
 
         isRunning = true
         errorMessage = nil
+        notice = nil
+        undoCandidate = nil
         streamingText = ""
         liveBadges = []
         defer {
@@ -169,7 +178,7 @@ public final class ChatViewModel: ObservableObject {
         // Motoru mesaj kaydetmeden önce kur; anahtar yoksa boş sohbet kalmasın.
         let engine: ChatEngine
         do {
-            engine = try environment.makeChatEngine()
+            engine = try await environment.makeChatEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -252,6 +261,29 @@ public final class ChatViewModel: ObservableObject {
         // Kalıcı sohbetin liste tarihi/başlığı yenilenir. Özel oturumda ise
         // mesajlar ve metadata bellekte bırakılır, veritabanına dokunulmaz.
         if !isPrivate { await load() }
+
+        // Geri alma yalnız bu turda gerçekten bir iş yapıldıysa önerilir;
+        // sohbet boyunca duran kalıcı bir düğme, kullanıcının ne geri
+        // alacağını bilmeden basmasına yol açardı.
+        undoCandidate = liveBadges.isEmpty
+            ? nil
+            : try? await environment.undo?.candidate()
+    }
+
+    /// Sohbetteki "Geri al" şeridi.
+    public func undoLast() async {
+        guard let environment, let candidate = undoCandidate else { return }
+        do {
+            guard let described = try await environment.undo?.undo(candidate) else { return }
+            undoCandidate = nil
+            notice = "Geri alındı: \(described)"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func dismissUndo() {
+        undoCandidate = nil
     }
 
     // MARK: - Görüntüleme
@@ -265,10 +297,15 @@ public final class ChatViewModel: ObservableObject {
     }
 
     /// Boş ekranda gösterilen örnek istekler.
+    ///
+    /// Yalnız süs değil: kullanıcının hangi yeteneklerin var olduğunu
+    /// keşfetmesinin en kısa yolu. v0.3'ün yeni araçları burada temsil ediliyor.
     public static let suggestions = [
         "Bugün ne yapmalıyım?",
         "Yarın 18:00'e spor görevi ekle",
-        "Bu haftayı planlamama yardım et",
+        "Bu hafta ne zaman boşum?",
+        "25 dakika odaklanalım",
+        "Salı ve perşembe spor yaptığımı hatırla",
         "Şunu not al: ",
     ]
 }

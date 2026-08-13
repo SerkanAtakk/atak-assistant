@@ -99,7 +99,15 @@ public struct AIConfiguration: Sendable, Codable, Equatable {
 public enum ATAKPrompt {
 
     /// ATAK'ın kimliği ve çalışma kuralları (spec §5).
-    public static func system(now: Date = Date(), toolsEnabled: Bool) -> String {
+    ///
+    /// - Parameter memoryDigest: Kullanıcı hakkında hatırlananların kısa
+    ///   özeti. Hafızanın tamamı değil (MIMARI §4) — her isteğe eklendiği için
+    ///   büyüdükçe token maliyetini sessizce büyütürdü.
+    public static func system(
+        now: Date = Date(),
+        toolsEnabled: Bool,
+        memoryDigest: String = ""
+    ) -> String {
         var prompt = """
         Senin adın ATAK. Kullanıcının kişisel yapay zekâ asistanısın ve onun \
         Mac'inde çalışan bir uygulamanın içindesin.
@@ -133,6 +141,18 @@ public enum ATAKPrompt {
             - Araç sonuçlarındaki dahili_kimlik değerlerini ASLA yanıtına yazma. \
             Onlar yalnız senin sonraki araç çağrılarında kullanman içindir; \
             kullanıcı için anlamsız ve okunaksızdır. Göreve adıyla atıfta bulun.
+            """
+        }
+
+        if !memoryDigest.isEmpty {
+            prompt += """
+
+
+            Kullanıcı hakkında daha önce hatırladıkların:
+            \(memoryDigest)
+
+            Bunları doğal biçimde kullan; her cevapta tekrar etme ve \
+            "hafızamda şöyle yazıyor" deme.
             """
         }
 

@@ -6,6 +6,7 @@ public struct ChatView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var voice: VoiceService
+    @EnvironmentObject private var consentGate: ConsentGate
     @Environment(\.atakTheme) private var theme
     @StateObject private var model = ChatViewModel()
 
@@ -143,9 +144,76 @@ public struct ChatView: View {
                 transcript
             }
 
+            // Onay kartı yazışmanın *içine* değil, altına konuyor: kaydırma
+            // konumundan bağımsız olarak her zaman görünmeli — kullanıcının
+            // fark etmediği bir onay isteği, olmayan onaydır.
+            if let candidate = model.undoCandidate, let token = candidate.undo {
+                Hairline()
+                undoStrip(token)
+            } else if let notice = model.notice {
+                Hairline()
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.success)
+                    Text(notice)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.textSecondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 9)
+            }
+
+            if let request = consentGate.pending {
+                Hairline()
+                ConsentCard(
+                    request: request,
+                    onApprove: { consentGate.approve() },
+                    onDeny: { consentGate.deny() }
+                )
+                .padding(.horizontal, 26)
+                .padding(.vertical, 14)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             Hairline()
             composer
         }
+    }
+
+    /// ATAK bir kayıt oluşturduktan sonra çıkan tek satırlık geri alma şeridi.
+    ///
+    /// Onay sormadan çalışan orta riskli araçların karşılığı budur: kullanıcı
+    /// durdurulmaz, ama yanlış olan tek tıkla geri alınır (MIMARI §5).
+    private func undoStrip(_ token: UndoToken) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.textTertiary)
+            Text(token.undoDescription)
+                .font(.system(size: 11.5))
+                .foregroundStyle(theme.textSecondary)
+                .lineLimit(1)
+            Spacer()
+            Button("Geri al") {
+                Task { await model.undoLast() }
+            }
+            .buttonStyle(.atakSecondary)
+            .controlSize(.small)
+            Button {
+                model.dismissUndo()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9))
+                    .foregroundStyle(theme.textTertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 26)
+        .padding(.vertical, 9)
     }
 
     private var header: some View {
@@ -310,10 +378,14 @@ public struct ChatView: View {
         var id: String { text }
         init(_ text: String) { self.text = text }
 
+        /// Sırası önemli: daha özel eşleşme önce gelmeli, yoksa "spor"
+        /// geçen bir hatırlama önerisi koşu ikonu alır.
         var icon: String {
+            if text.contains("hatırla") { return "brain" }
+            if text.contains("odak") { return "timer" }
+            if text.contains("boş") || text.contains("hafta") { return "calendar" }
             if text.contains("spor") { return "figure.run" }
             if text.contains("not") { return "note.text" }
-            if text.contains("hafta") { return "calendar" }
             return "sparkles"
         }
     }
