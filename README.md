@@ -122,7 +122,7 @@ Requires macOS 14+, Swift 6.0+, Command Line Tools. **No Xcode needed.**
 
 ```bash
 make run       # build, bundle, ad-hoc sign, launch
-make test      # 156 tests
+make test      # 160 tests
 make smoke     # isolated headless start-up + DB + FTS5 round trip
 make install   # copy to /Applications
 ```
@@ -133,7 +133,7 @@ Data lives in a single file: `~/Library/Application Support/ATAK/atak.db`.
 
 ## Status
 
-**v0.3 — the action engine.** Risk classification, consent gate, audit log and undo are live, and the schema's long-dormant tables (`assistant_action`, `memory_item`, `timer_session`) are finally in use. Calendar (EventKit) reads freely and writes only with consent; long-term memory, and a focus timer with persisted sessions round out the release. 156 tests are green.
+**v0.3 — the action engine.** Risk classification, consent gate, audit log and undo are live, and the schema's long-dormant tables (`assistant_action`, `memory_item`, `timer_session`) are finally in use. Calendar (EventKit) reads freely and writes only with consent; long-term memory, and a focus timer with persisted sessions round out the release. 160 tests are green.
 
 <details>
 <summary>v0.2 — professional foundation</summary>

@@ -447,6 +447,6 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 public enum AppInfo {
-    public static let version = "0.3.0"
+    public static let version = "0.3.1"
     public static let bundleIdentifier = "com.serkanatak.atak"
 }
