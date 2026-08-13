@@ -58,6 +58,14 @@ Each speaks streaming SSE and tool calling, normalised behind a single `AIProvid
 
 Model names are discovered live from the provider (`Fetch models`) rather than hardcoded — providers retire model IDs without warning, and a stale constant is a silent outage.
 
+### The bug that ate every reply
+
+Gemini connected, returned `200`, and the chat stayed empty. Two plausible theories (thinking budget, changed API surface) were both wrong. Dumping the raw SSE bytes settled it in seconds: Gemini sends **no blank line between events**, so a spec‑literal parser that only emits on `\n\n` merges two JSON objects into one buffer, which stops being valid JSON — and the reply disappears without an error.
+
+[`SSE.Parser`](Sources/ATAKCore/AI/SSE.swift) is therefore a line‑fed state machine that also flushes when the buffer is already complete JSON. It is pure, so the real payload that broke it is now a regression test ([`AITests.swift`](Tests/ATAKTests/AITests.swift), suite *Gerçek Gemini akışı*) with no HTTP involved.
+
+The lesson generalised into a rule for the rest of the project: on an integration failure, look at the real bytes before reading the documentation.
+
 ### Agent loop
 
 Budgeted and cancellable (5 iterations, 8 tool calls, 120 s). When the budget is hit, ATAK reports how far it got instead of failing silently. Tools available today:
@@ -72,7 +80,11 @@ SQLite FTS5's `remove_diacritics` cannot fold Turkish **ı** (it is a distinct l
 
 ### Voice
 
-Push‑to‑talk (⌘M) via `SFSpeechRecognizer` (on‑device when supported), replies spoken with `AVSpeechSynthesizer`. Continuous listening is off by default — the mic opens only when you start it.
+Push‑to‑talk (⌘M) via `SFSpeechRecognizer` (on‑device when supported), replies spoken with `AVSpeechSynthesizer` (Turkish voice, markdown stripped before reading).
+
+Voice is **opt‑in and off by default** — both the launch greeting and spoken replies are switched on in Settings → Ses. Continuous listening does not exist: the mic opens when you start it and closes when you stop it, never on its own.
+
+Speech *output* needs no permission at all; only listening asks for the microphone and Speech Recognition. The two are kept independent, so a denied mic never costs you audio.
 
 ## Build
 
@@ -80,7 +92,7 @@ Requires macOS 14+, Swift 6.0+, Command Line Tools. **No Xcode needed.**
 
 ```bash
 make run       # build, bundle, ad-hoc sign, launch
-make test      # 112 tests
+make test      # 114 tests
 make smoke     # isolated headless start-up + DB + FTS5 round trip
 make install   # copy to /Applications
 ```
@@ -91,7 +103,7 @@ Data lives in a single file: `~/Library/Application Support/ATAK/atak.db`.
 
 ## Status
 
-**v0.2 — professional foundation.** The default Minimal interface now has a consistent three-column chat, actionable dashboard, polished empty/loading/error states, provider onboarding, menu-bar lifecycle and a real application icon. Chat with tool use, tasks, projects, notes with FTS5 search, opt-in voice, two themes and multi-provider AI are working. Privacy Mode keeps both messages and conversation metadata memory-only; note autosave survives fast selection changes. Cloud credentials are restricted to official HTTPS endpoints, Ollama overrides are validated, and local database files use private permissions. 112 tests are green.
+**v0.2 — professional foundation.** The default Minimal interface now has a consistent three-column chat, actionable dashboard, polished empty/loading/error states, provider onboarding, menu-bar lifecycle and a real application icon. Chat with tool use, tasks, projects, notes with FTS5 search, opt-in voice, two themes and multi-provider AI are working. Privacy Mode keeps both messages and conversation metadata memory-only; note autosave survives fast selection changes. Cloud credentials are restricted to official HTTPS endpoints, Ollama overrides are validated, and local database files use private permissions. 114 tests are green.
 
 Next roadmap: explicit consent/audit/undo for higher-risk tools, stricter end-to-end network deadlines, calendar (EventKit), documents/PDF, focus timer, long-term memory UI, automations and broader UI/provider test coverage. See [`docs/MIMARI.md`](docs/MIMARI.md) §15.
 
