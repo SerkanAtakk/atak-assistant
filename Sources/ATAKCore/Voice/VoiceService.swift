@@ -185,12 +185,20 @@ public final class VoiceService: ObservableObject {
 
     public func speak(_ text: String) {
         let cleaned = Self.strippedForSpeech(text)
-        guard !cleaned.isEmpty else { return }
+        guard !cleaned.isEmpty else {
+            Log.app.info("speak: temizlikten sonra metin boş kaldı, okunmadı")
+            return
+        }
 
         stopSpeaking()
 
+        let voice = Self.preferredVoice()
+        Log.app.info(
+            "speak: \(cleaned.count) karakter, ses=\(voice?.name ?? "YOK", privacy: .public)"
+        )
+
         let utterance = AVSpeechUtterance(string: cleaned)
-        utterance.voice = Self.preferredVoice()
+        utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.postUtteranceDelay = 0.1
 

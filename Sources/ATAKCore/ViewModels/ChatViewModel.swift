@@ -53,8 +53,14 @@ public final class ChatViewModel: ObservableObject {
     /// geri gelince tekrar konuşmaz.
     public func greetIfNeeded() {
         guard let environment, !hasGreeted else { return }
-        guard environment.voiceSettings.greetOnLaunch else { return }
-        guard activeConversation == nil, visibleMessages.isEmpty else { return }
+        guard environment.voiceSettings.greetOnLaunch else {
+            Log.app.info("karşılama: ayardan kapalı")
+            return
+        }
+        // Eski koşul sohbet geçmişi boş olmasını da şart koşuyordu; ilk
+        // konuşmadan sonra uygulama bir daha hiç karşılamıyordu. Karşılama
+        // oturum başına birdir — geçmişin dolu olması onu engellememeli.
+        guard !isRunning else { return }
 
         hasGreeted = true
         environment.voice.speak(environment.greeting)
