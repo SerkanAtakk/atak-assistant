@@ -2,16 +2,20 @@
 
 A native macOS personal AI assistant, built **without Xcode** — pure SwiftPM, zero third‑party dependencies.
 
-ATAK is more than a chat wrapper. It combines AI chat with tasks, projects and searchable notes, and can safely perform these actions through its built-in tools. Ask it to "add a gym task for tomorrow at 6pm" and it creates the task, then verifies the write before claiming success.
+ATAK is more than a chat wrapper. It combines AI chat with tasks, projects, searchable notes, your calendar, a focus timer and a long-term memory — and it performs those actions itself through built-in tools. Ask it to "add a gym task for tomorrow at 6pm" and it creates the task, then verifies the write before claiming success. Ask it to put something in your calendar and it stops to ask first.
 
 > Türkçe konuşan bir asistan olarak tasarlandı; arayüz ve sistem promptu Türkçedir.
 > Mimari dokümanı: [`docs/MIMARI.md`](docs/MIMARI.md) (Türkçe, 16 bölüm).
 
 ![ATAK dashboard](docs/screenshots/dashboard.png)
 
-| Chat with tool use | Provider settings |
+| Chat with tool use | Memory + audit log |
 |---|---|
-| ![Chat](docs/screenshots/chat.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Chat](docs/screenshots/chat.png) | ![Memory](docs/screenshots/memory.png) |
+
+| Focus timer | Provider settings |
+|---|---|
+| ![Focus](docs/screenshots/focus.png) | ![Settings](docs/screenshots/settings.png) |
 
 <sub>Screenshots are rendered by the app itself — <code>ATAK_SHOT=&lt;dir&gt; open -a ATAK</code> adds a capture menu item that draws the window's own view hierarchy to PNG. No Screen Recording permission involved, and no desktop or cursor bleeding into the frame. See <a href="Sources/ATAKCore/Utilities/WindowCapture.swift"><code>WindowCapture.swift</code></a>.</sub>
 
@@ -39,9 +43,11 @@ Views + ViewModels          SwiftUI, reusable components, two themes
         │
 AgentRuntime                budgeted tool loop, cancellable
         │
-AI providers · Local tools · Voice
+RiskEngine · ConsentGate    risk classification, user approval, undo
         │
-SQLite (WAL + FTS5) · Keychain · Speech · AVFoundation
+AI providers · Tools · Memory · Calendar · Focus · Voice
+        │
+SQLite (WAL + FTS5) · Keychain · EventKit · Speech · AVFoundation
 ```
 
 **Concurrency:** Swift 6 strict mode. The database is an `actor`; rows never escape it as reference types — repositories return `Sendable` structs.
@@ -70,9 +76,33 @@ The lesson generalised into a rule for the rest of the project: on an integratio
 
 Budgeted and cancellable (5 iterations, 8 tool calls, 120 s). When the budget is hit, ATAK reports how far it got instead of failing silently. Tools available today:
 
-`create_task` · `list_tasks` · `complete_task` · `create_note` · `search_notes` · `create_project`
+`create_task` · `list_tasks` · `complete_task` · `create_note` · `search_notes` · `create_project` · `remember` · `recall` · `query_calendar` · `find_free_time` · `create_calendar_event` · `start_focus_timer`
 
 Every write is read back before ATAK claims it succeeded.
+
+### Risk, consent and undo
+
+Every tool call runs the same pipeline — **safety card → risk → consent → execute → verify → audit log** — and the tools themselves know nothing about it. Security decisions live in one place.
+
+Risk is not a constant. It escalates with context:
+
+```
+base risk from the tool's safety card
++1  if the action is irreversible
++1  if it touches more than 5 records
++1  if data leaves the device
++1  if the input came from content ATAK read, not from the user
+```
+
+That last rule is the real defence against prompt injection: anything derived from a document, page or email is asked about, even when the tool itself is low-risk. Memory writes from read content are rejected outright at the service layer — a planted "fact" would otherwise live in the system prompt forever.
+
+Consent cards default to **Cancel**, bind Return to Cancel, and never offer "don't ask again". If no gate is wired up, the default is **deny** — a misconfiguration should not become a silent security hole.
+
+Anything ATAK does is written to `assistant_action`, and the medium-risk tools that run without asking are undoable in one click. The chat transcript is the model's *claim*; that table is what actually ran.
+
+### Long-term memory
+
+Separate from chat history: the window forgets, memory does not. A bounded digest (pinned first, then most used) is prepended to the system prompt rather than the whole store — otherwise memory quietly inflates the token bill on every request. Everything ATAK knows about you is visible and deletable on one screen, and a new value for an existing key supersedes the old one instead of deleting it: how the memory changed is information too.
 
 ### Turkish full‑text search
 
@@ -92,7 +122,7 @@ Requires macOS 14+, Swift 6.0+, Command Line Tools. **No Xcode needed.**
 
 ```bash
 make run       # build, bundle, ad-hoc sign, launch
-make test      # 114 tests
+make test      # 156 tests
 make smoke     # isolated headless start-up + DB + FTS5 round trip
 make install   # copy to /Applications
 ```
@@ -103,9 +133,16 @@ Data lives in a single file: `~/Library/Application Support/ATAK/atak.db`.
 
 ## Status
 
-**v0.2 — professional foundation.** The default Minimal interface now has a consistent three-column chat, actionable dashboard, polished empty/loading/error states, provider onboarding, menu-bar lifecycle and a real application icon. Chat with tool use, tasks, projects, notes with FTS5 search, opt-in voice, two themes and multi-provider AI are working. Privacy Mode keeps both messages and conversation metadata memory-only; note autosave survives fast selection changes. Cloud credentials are restricted to official HTTPS endpoints, Ollama overrides are validated, and local database files use private permissions. 114 tests are green.
+**v0.3 — the action engine.** Risk classification, consent gate, audit log and undo are live, and the schema's long-dormant tables (`assistant_action`, `memory_item`, `timer_session`) are finally in use. Calendar (EventKit) reads freely and writes only with consent; long-term memory, and a focus timer with persisted sessions round out the release. 156 tests are green.
 
-Next roadmap: explicit consent/audit/undo for higher-risk tools, stricter end-to-end network deadlines, calendar (EventKit), documents/PDF, focus timer, long-term memory UI, automations and broader UI/provider test coverage. See [`docs/MIMARI.md`](docs/MIMARI.md) §15.
+<details>
+<summary>v0.2 — professional foundation</summary>
+
+**v0.2.** The default Minimal interface now has a consistent three-column chat, actionable dashboard, polished empty/loading/error states, provider onboarding, menu-bar lifecycle and a real application icon. Chat with tool use, tasks, projects, notes with FTS5 search, opt-in voice, two themes and multi-provider AI are working. Privacy Mode keeps both messages and conversation metadata memory-only; note autosave survives fast selection changes. Cloud credentials are restricted to official HTTPS endpoints, Ollama overrides are validated, and local database files use private permissions.
+
+</details>
+
+Next roadmap: documents/PDF reading (with the untrusted-content path the risk engine already anticipates), Reminders sync, stricter end-to-end network deadlines, automations, and broader UI/provider test coverage. See [`docs/MIMARI.md`](docs/MIMARI.md) §15.
 
 ## License
 

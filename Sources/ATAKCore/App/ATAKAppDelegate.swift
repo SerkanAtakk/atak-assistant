@@ -396,7 +396,8 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(500))
 
             for section in [
-                AppSection.chat, .dashboard, .tasks, .projects, .notes, .settings,
+                AppSection.chat, .dashboard, .tasks, .projects, .notes,
+                .calendar, .focus, .memory, .settings,
             ] {
                 environment.router.select(section)
                 try? await Task.sleep(for: .milliseconds(450))
@@ -422,7 +423,7 @@ public final class ATAKAppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .informational
         alert.messageText = "ATAK Yardım"
         alert.informativeText = """
-        Bölümler arasında ⌘1–⌘6 ile geçebilir, ana pencereyi ⌘N veya ⌘0 ile yeniden açabilirsin.
+        Bölümler arasında ⌘1–⌘9 ile geçebilir, ana pencereyi ⌘N veya ⌘0 ile yeniden açabilirsin.
 
         ATAK pencere kapalıyken menü çubuğundaki simgeden çalışmaya devam eder.
         """
