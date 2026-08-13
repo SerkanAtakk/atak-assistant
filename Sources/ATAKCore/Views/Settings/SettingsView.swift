@@ -12,24 +12,59 @@ public struct SettingsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("Ayarlar")
-                    .font(theme.titleFont(size: 26, weight: .semibold))
-                    .foregroundStyle(theme.textPrimary)
+                settingsHeader
 
-                personalSection
-                voiceSection
+                if !environment.isAIReady {
+                    InlineNotice(
+                        "Kurulumu tamamla",
+                        message: "Bir sağlayıcı seçip anahtarını Keychain'e kaydet; ardından bağlantıyı test et.",
+                        kind: .warning
+                    )
+                }
+
                 providerSection
+                personalSection
                 appearanceSection
                 behaviourSection
+                voiceSection
                 dataSection
                 aboutSection
             }
-            .padding(26)
-            .frame(maxWidth: 720, alignment: .leading)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Ayarlar")
         .task { model.configure(environment) }
+    }
+
+    private var settingsHeader: some View {
+        HStack(alignment: .top, spacing: 18) {
+            ScreenHeader(
+                "Ayarlar",
+                subtitle: "Asistanın davranışını, bağlantısını ve yerel verilerini yönet.",
+                eyebrow: "ATAK kontrol merkezi",
+                systemImage: "gearshape.fill"
+            )
+            Spacer(minLength: 12)
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(environment.isAIReady ? theme.success : theme.warning)
+                    .frame(width: 7, height: 7)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(environment.isAIReady ? "Bağlı" : "Bağlantı bekliyor")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(theme.textPrimary)
+                    Text(model.configuration.info.displayName)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(theme.textTertiary)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .panel(raised: true)
+        }
     }
 
     // MARK: - Kişisel
@@ -482,12 +517,13 @@ public struct SettingsView: View {
                 set: { model.setPrivateMode($0) }
             )) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Privacy Mode")
+                    Text("Özel oturum")
                         .font(.system(size: 12.5))
                         .foregroundStyle(theme.textPrimary)
-                    Text("Sohbet diske kaydedilmez. Uygulamayı kapatınca geçmiş kaybolur.")
+                    Text("Sohbet metadata dahil diske yazılmaz ve uygulama kapanınca kaybolur. Bulut modeli kullanıyorsan mesajlar yanıt üretmek için sağlayıcıya yine gönderilir; tamamen yerel kullanım için Ollama'yı seç.")
                         .font(.system(size: 10.5))
                         .foregroundStyle(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -558,9 +594,7 @@ public struct SettingsView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(theme.titleFont(size: 14))
-                .foregroundStyle(theme.textPrimary)
+            SectionTitle(title)
             VStack(alignment: .leading, spacing: 12) {
                 content()
             }

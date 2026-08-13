@@ -111,6 +111,15 @@ public final class ChatViewModel: ObservableObject {
 
     public func delete(_ conversation: Conversation) async {
         guard let service = environment?.conversations else { return }
+
+        // Özel sohbetin veritabanında karşılığı yoktur. Bellekteki oturumu
+        // kapatmak yeterli; böylece Privacy Mode'da gereksiz bir yazma
+        // ifadesi dahi çalıştırılmaz.
+        guard !conversation.isPrivate else {
+            if activeConversation?.id == conversation.id { startNewConversation() }
+            return
+        }
+
         do {
             try await service.delete(conversation.id)
             if activeConversation?.id == conversation.id { startNewConversation() }
@@ -160,19 +169,27 @@ public final class ChatViewModel: ObservableObject {
             return
         }
 
-        // Sohbet yoksa oluştur, başlığı ilk mesajdan türet.
+        // Sohbet yoksa oluştur, başlığı ilk mesajdan türet. Privacy Mode
+        // normal bir sohbetin ortasında açılıp kapanmış olabilir; farklı
+        // kalıcılık kipindeki sohbeti yeniden kullanmak özel mesajları açık
+        // geçmişe karıştırır veya kaydedilmemiş bir kimliğe yazmaya çalışır.
         let conversation: Conversation
-        if let active = activeConversation {
+        if let active = activeConversation, active.isPrivate == isPrivate {
             conversation = active
         } else {
             do {
+                // Kip değiştiyse önceki sohbetin mesajları yeni oturumun
+                // model geçmişine taşınmamalı.
+                messages = []
                 let created = try await service.create(
                     title: String(text.prefix(60)),
                     isPrivate: isPrivate
                 )
                 conversation = created
                 activeConversation = created
-                await load()
+                // Özel sohbet listeye hiç girmez; başlığı ve kimliği yalnız
+                // activeConversation içinde yaşar.
+                if !isPrivate { await load() }
             } catch {
                 errorMessage = error.localizedDescription
                 return
@@ -226,7 +243,9 @@ public final class ChatViewModel: ObservableObject {
             }
         }
 
-        await load()
+        // Kalıcı sohbetin liste tarihi/başlığı yenilenir. Özel oturumda ise
+        // mesajlar ve metadata bellekte bırakılır, veritabanına dokunulmaz.
+        if !isPrivate { await load() }
     }
 
     // MARK: - Görüntüleme

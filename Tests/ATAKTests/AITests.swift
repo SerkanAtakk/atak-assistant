@@ -635,7 +635,9 @@ struct AIConfigurationTests {
             from: Data(#"{"speakReplies":false}"#.utf8)
         )
         #expect(decoded.speakReplies == false)
-        #expect(decoded.greetOnLaunch == true)
+        // Yeni kurulumlarda beklenmedik ses çıkışı olmaması için eksik alan
+        // güvenli varsayılana düşer; açık tercih taşıyan eski kayıtlar korunur.
+        #expect(decoded.greetOnLaunch == false)
     }
 
     @Test("Anahtar gerektirmeyen sağlayıcı her zaman hazır")
@@ -685,6 +687,90 @@ struct AIConfigurationTests {
     func refusesMissingKey() {
         #expect(throws: ATAKError.self) {
             _ = try AIProviderCatalog.makeProvider(for: .gemini, apiKey: nil)
+        }
+    }
+
+    @Test("Bulut sağlayıcıları özel adrese API anahtarı göndermez")
+    func cloudProvidersRejectEveryOverride() {
+        let cloudProviders: [AIProviderID] = [.gemini, .groq, .openRouter, .anthropic]
+
+        for provider in cloudProviders {
+            #expect(throws: ATAKError.self) {
+                _ = try AIProviderCatalog.makeProvider(
+                    for: provider,
+                    apiKey: "secret-test-key",
+                    baseURLOverride: "https://attacker.example/v1"
+                )
+            }
+
+            // Resmî adresin elle girilmiş kopyası da override sayılır. Güvenlik
+            // sınırı yalnız kod içindeki denetlenmiş katalog adresini kullanır.
+            #expect(throws: ATAKError.self) {
+                _ = try AIProviderCatalog.validatedBaseURL(
+                    for: provider,
+                    override: AIProviderCatalog.info(for: provider).baseURL
+                )
+            }
+        }
+    }
+
+    @Test("Katalogdaki bulut adresleri yalnız resmî HTTPS hostlarını kullanır")
+    func cloudCatalogUsesTrustedHTTPSHosts() throws {
+        for provider in [AIProviderID.gemini, .groq, .openRouter, .anthropic] {
+            let info = AIProviderCatalog.info(for: provider)
+            #expect(try AIProviderCatalog.validatedBaseURL(for: provider, override: nil) == info.baseURL)
+        }
+    }
+
+    @Test("Ollama HTTP'de yalnız gerçek loopback adreslerini kabul eder")
+    func ollamaAllowsOnlyLoopbackOverHTTP() throws {
+        let accepted = [
+            "http://localhost:11434/v1",
+            "http://127.0.0.1:11434/v1",
+            "http://[::1]:11434/v1",
+        ]
+        for address in accepted {
+            #expect(try AIProviderCatalog.validatedBaseURL(for: .ollama, override: address) == address)
+        }
+
+        let rejected = [
+            "http://ollama.internal:11434/v1",
+            "http://0.0.0.0:11434/v1",
+            "http://127.0.0.2:11434/v1",
+            "http://localhost.evil.example:11434/v1",
+        ]
+        for address in rejected {
+            #expect(throws: ATAKError.self) {
+                _ = try AIProviderCatalog.validatedBaseURL(for: .ollama, override: address)
+            }
+        }
+    }
+
+    @Test("Uzak Ollama sunucusu şifreli HTTPS ile kullanılabilir")
+    func ollamaAllowsRemoteHTTPS() throws {
+        let address = "https://ollama.example.com/v1/"
+        #expect(
+            try AIProviderCatalog.validatedBaseURL(for: .ollama, override: address)
+                == "https://ollama.example.com/v1"
+        )
+    }
+
+    @Test("Kimlik bilgili, sorgulu, parçalı ve bozuk sunucu adresleri reddedilir")
+    func rejectsAmbiguousOrCredentialedURLs() {
+        let rejected = [
+            "http://user:password@localhost:11434/v1",
+            "http://localhost:11434/v1?redirect=https://attacker.example",
+            "http://localhost:11434/v1#fragment",
+            "ftp://localhost:11434/v1",
+            "http://localhost:0/v1",
+            "http://local host:11434/v1",
+            "not-a-url",
+        ]
+
+        for address in rejected {
+            #expect(throws: ATAKError.self) {
+                _ = try AIProviderCatalog.validatedBaseURL(for: .ollama, override: address)
+            }
         }
     }
 

@@ -12,6 +12,9 @@ public final class AppRouter: ObservableObject {
     @Published public var section: AppSection = .chat
     @Published public var selectedProjectID: UUID?
     @Published public var selectedTaskID: UUID?
+    /// Başka bir ekrandan sohbete taşınan taslak. Sohbet ekranı değeri bir
+    /// kez tüketir; böylece Dashboard'da yazılan metin kaybolmaz.
+    @Published public var pendingChatPrompt: String?
 
     public init() {}
 
@@ -22,5 +25,21 @@ public final class AppRouter: ObservableObject {
     public func openProject(_ id: UUID) {
         selectedProjectID = id
         section = .projects
+    }
+
+    public func openTask(_ id: UUID) {
+        selectedTaskID = id
+        section = .tasks
+    }
+
+    public func openChat(with prompt: String? = nil) {
+        let trimmed = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingChatPrompt = trimmed?.isEmpty == false ? trimmed : nil
+        section = .chat
+    }
+
+    public func consumeChatPrompt() -> String? {
+        defer { pendingChatPrompt = nil }
+        return pendingChatPrompt
     }
 }

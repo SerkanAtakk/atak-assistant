@@ -3,21 +3,28 @@ import SwiftUI
 public struct ProjectsView: View {
 
     @EnvironmentObject private var environment: AppEnvironment
+    @EnvironmentObject private var router: AppRouter
+    @Environment(\.atakTheme) private var theme
     @StateObject private var model = ProjectsViewModel()
 
     public init() {}
 
     public var body: some View {
-        HStack(spacing: 0) {
-            listColumn
-            if model.draft != nil {
-                Divider()
-                ProjectInspector(model: model)
-                    .frame(width: 320)
+        VStack(spacing: 0) {
+            header
+            Hairline()
+            HStack(spacing: 0) {
+                listColumn
+                if model.draft != nil {
+                    Rectangle().fill(theme.hairline).frame(width: theme.hairlineWidth)
+                    ProjectInspector(model: model)
+                        .frame(width: 350)
+                }
             }
         }
         .navigationTitle("Projeler")
-        .task {
+        .task(id: router.section) {
+            guard router.section == .projects else { return }
             model.configure(environment)
             await model.load()
         }
@@ -34,18 +41,34 @@ public struct ProjectsView: View {
         }
     }
 
+    private var header: some View {
+        HStack(alignment: .center, spacing: 18) {
+            ScreenHeader(
+                "Projeler",
+                subtitle: "Büyük hedefleri görünür, ölçülebilir ilerlemeye dönüştür.",
+                eyebrow: "Çalışma alanı",
+                systemImage: "square.stack.3d.up.fill"
+            )
+            Spacer(minLength: 12)
+            Text("\(model.projects.filter { $0.status == .active }.count) aktif")
+                .font(theme.labelFont(size: 10.5))
+                .foregroundStyle(theme.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(theme.surfaceRaised, in: Capsule())
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+    }
+
     private var listColumn: some View {
         VStack(spacing: 0) {
             if model.projects.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "square.stack.3d.up")
-                        .font(.system(size: 34))
-                        .foregroundStyle(.tertiary)
-                    Text("Henüz proje yok.\nBüyük bir hedefi buraya proje olarak ekleyebilirsin.")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                EmptyStateView(
+                    systemImage: "square.stack.3d.up",
+                    title: "İlk projen için hazır",
+                    message: "Bir hedefe isim ver; görevlerini ve ilerlemeni burada birlikte takip edelim."
+                )
             } else {
                 List(selection: $model.selectedID) {
                     ForEach(model.projects) { project in
@@ -59,24 +82,35 @@ public struct ProjectsView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
 
-            Divider()
+            Hairline()
             HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
-                TextField("Yeni proje…", text: $model.newProjectName)
+                Image(systemName: "plus").foregroundStyle(theme.accent)
+                TextField("Yeni projeye isim ver…", text: $model.newProjectName)
                     .textFieldStyle(.plain)
                     .onSubmit { Task { await model.addProject() } }
+                if !model.newProjectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        Task { await model.addProject() }
+                    } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.atakPrimary)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(.bar)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(theme.surface.opacity(0.92))
         }
         .frame(maxWidth: .infinity)
     }
 }
 
 struct ProjectRow: View {
+    @Environment(\.atakTheme) private var theme
     let project: Project
     let progress: ProjectProgress
 
@@ -95,14 +129,14 @@ struct ProjectRow: View {
                             .controlSize(.small)
                         Text("\(progress.done)/\(progress.total)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                     } else {
-                        Text("Görev yok").font(.caption).foregroundStyle(.tertiary)
+                        Text("Henüz görev yok").font(.caption).foregroundStyle(theme.textTertiary)
                     }
                     if let deadline = project.deadline {
                         Label(DateFormat.relativeDay(deadline), systemImage: "flag")
                             .font(.caption)
-                            .foregroundStyle(deadline < Date() ? Color.red : .secondary)
+                            .foregroundStyle(deadline < Date() ? theme.danger : theme.textSecondary)
                     }
                 }
             }
@@ -113,26 +147,36 @@ struct ProjectRow: View {
 }
 
 struct ProjectInspector: View {
+    @Environment(\.atakTheme) private var theme
     @ObservedObject var model: ProjectsViewModel
 
     var body: some View {
         if let draft = model.draft {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        TechLabel("Proje ayrıntısı", color: theme.accent)
+                        Spacer()
+                        if draft.status == .completed {
+                            Label("Tamamlandı", systemImage: "checkmark.circle.fill")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(theme.success)
+                        }
+                    }
                     TextField("Proje adı", text: nameBinding)
                         .textFieldStyle(.plain)
                         .font(.title3.weight(.medium))
                         .onSubmit { Task { await model.saveDraft() } }
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Açıklama").font(.caption).foregroundStyle(.secondary)
+                        Text("Açıklama").font(.caption).foregroundStyle(theme.textSecondary)
                         TextEditor(text: detailsBinding)
                             .frame(minHeight: 70)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.hairline))
                     }
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Durum").font(.caption).foregroundStyle(.secondary)
+                        Text("Durum").font(.caption).foregroundStyle(theme.textSecondary)
                         Picker("", selection: statusBinding) {
                             ForEach(ProjectStatus.allCases) { Text($0.displayName).tag($0) }
                         }
@@ -140,18 +184,25 @@ struct ProjectInspector: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Renk").font(.caption).foregroundStyle(.secondary)
+                        Text("Renk").font(.caption).foregroundStyle(theme.textSecondary)
                         HStack(spacing: 6) {
                             ForEach(ProjectColor.allCases) { option in
-                                Circle()
-                                    .fill(option.color)
-                                    .frame(width: 18, height: 18)
-                                    .overlay(
-                                        Circle()
-                                            .strokeBorder(.primary, lineWidth: draft.color == option ? 2 : 0)
-                                    )
-                                    .onTapGesture { model.mutateDraft { $0.color = option } }
-                                    .help(option.displayName)
+                                Button {
+                                    model.mutateDraft { $0.color = option }
+                                } label: {
+                                    Circle()
+                                        .fill(option.color)
+                                        .frame(width: 18, height: 18)
+                                        .overlay {
+                                            Circle()
+                                                .strokeBorder(theme.textPrimary, lineWidth: draft.color == option ? 2 : 0)
+                                        }
+                                        .padding(2)
+                                }
+                                .buttonStyle(.plain)
+                                .help(option.displayName)
+                                .accessibilityLabel("Proje rengi: \(option.displayName)")
+                                .accessibilityAddTraits(draft.color == option ? .isSelected : [])
                             }
                         }
                     }
@@ -166,16 +217,16 @@ struct ProjectInspector: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Görevler (\(model.projectTasks.count))")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(theme.textSecondary)
                         if model.projectTasks.isEmpty {
                             Text("Bu projeye bağlı görev yok. Görevler ekranından bir görevi bu projeye atayabilirsin.")
                                 .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(theme.textTertiary)
                         } else {
                             ForEach(model.projectTasks) { task in
                                 HStack(spacing: 6) {
                                     Image(systemName: task.status.systemImage)
-                                        .foregroundStyle(task.status == .done ? Color.accentColor : .secondary)
+                                        .foregroundStyle(task.status == .done ? theme.success : theme.textSecondary)
                                         .font(.caption)
                                     Text(task.title)
                                         .font(.caption)
@@ -188,7 +239,8 @@ struct ProjectInspector: View {
                     }
 
                     HStack {
-                        Button("Kaydet") { Task { await model.saveDraft() } }
+                        Button("Değişiklikleri kaydet") { Task { await model.saveDraft() } }
+                            .buttonStyle(.atakPrimary)
                         Spacer()
                         Button("Sil", role: .destructive) {
                             Task { await model.delete(draft.id) }
@@ -198,7 +250,7 @@ struct ProjectInspector: View {
                 }
                 .padding(16)
             }
-            .background(.background.secondary)
+            .background(theme.surface.opacity(0.72))
         }
     }
 

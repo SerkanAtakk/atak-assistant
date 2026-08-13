@@ -3,34 +3,30 @@ import SwiftUI
 public struct TasksView: View {
 
     @EnvironmentObject private var environment: AppEnvironment
+    @EnvironmentObject private var router: AppRouter
+    @Environment(\.atakTheme) private var theme
     @StateObject private var model = TasksViewModel()
 
     public init() {}
 
     public var body: some View {
-        HStack(spacing: 0) {
-            listColumn
-            if model.draft != nil {
-                Divider()
-                TaskInspector(model: model)
-                    .frame(width: 300)
-                    .transition(.move(edge: .trailing))
+        VStack(spacing: 0) {
+            header
+            Hairline()
+            HStack(spacing: 0) {
+                listColumn
+                if model.draft != nil {
+                    Rectangle().fill(theme.hairline).frame(width: theme.hairlineWidth)
+                    TaskInspector(model: model)
+                        .frame(width: 330)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
         .navigationTitle("Görevler")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("Filtre", selection: $model.filter) {
-                    ForEach(TaskListFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 380)
-            }
-        }
         .searchable(text: $model.searchText, prompt: "Görevlerde ara")
-        .task {
+        .task(id: router.section) {
+            guard router.section == .tasks else { return }
             model.configure(environment)
             await model.load()
         }
@@ -47,10 +43,50 @@ public struct TasksView: View {
         }
     }
 
+    private var header: some View {
+        HStack(alignment: .center, spacing: 18) {
+            ScreenHeader(
+                "Görevler",
+                subtitle: "Günün işlerini tek yerde planla ve ilerlemeyi takip et.",
+                eyebrow: "Çalışma alanı",
+                systemImage: "checklist"
+            )
+            Spacer(minLength: 12)
+            if model.isLoading {
+                ProgressView().controlSize(.small)
+            } else {
+                Text("\(model.tasks.count) kayıt")
+                    .font(theme.labelFont(size: 10.5))
+                    .foregroundStyle(theme.textTertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(theme.surfaceRaised, in: Capsule())
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+    }
+
     // MARK: - Liste
 
     private var listColumn: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Picker("Filtre", selection: $model.filter) {
+                    ForEach(TaskListFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 480)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .background(theme.surface.opacity(0.45))
+            Hairline()
+
             if model.tasks.isEmpty && !model.isLoading {
                 emptyState
             } else {
@@ -70,44 +106,50 @@ public struct TasksView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
 
-            Divider()
+            Hairline()
             addBar
         }
         .frame(maxWidth: .infinity)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "checklist")
-                .font(.system(size: 34))
-                .foregroundStyle(.tertiary)
-            Text(model.emptyStateMessage)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyStateView(
+            systemImage: model.searchText.isEmpty ? "checklist" : "magnifyingglass",
+            title: model.searchText.isEmpty ? "Bu görünüm tertemiz" : "Eşleşen görev yok",
+            message: model.emptyStateMessage
+        )
     }
 
     private var addBar: some View {
         HStack(spacing: 8) {
-            Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.tint)
-            TextField("Yeni görev…", text: $model.newTaskTitle)
+            Image(systemName: "plus")
+                .foregroundStyle(theme.accent)
+            TextField("Hızlı görev ekle…", text: $model.newTaskTitle)
                 .textFieldStyle(.plain)
                 .onSubmit { Task { await model.addTask() } }
+            if !model.newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    Task { await model.addTask() }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .buttonStyle(.atakPrimary)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.bar)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(theme.surface.opacity(0.92))
     }
 }
 
 // MARK: - Satır
 
 struct TaskRow: View {
+    @Environment(\.atakTheme) private var theme
     let task: TaskItem
     @ObservedObject var model: TasksViewModel
 
@@ -117,7 +159,7 @@ struct TaskRow: View {
                 Task { await model.toggleCompleted(task) }
             } label: {
                 Image(systemName: task.status.systemImage)
-                    .foregroundStyle(task.status == .done ? Color.accentColor : .secondary)
+                    .foregroundStyle(task.status == .done ? theme.success : theme.textTertiary)
                     .font(.system(size: 15))
             }
             .buttonStyle(.plain)
@@ -126,25 +168,25 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
                     .strikethrough(task.status == .done, color: .secondary)
-                    .foregroundStyle(task.status == .done ? .secondary : .primary)
+                    .foregroundStyle(task.status == .done ? theme.textSecondary : theme.textPrimary)
                     .lineLimit(2)
 
                 if hasMetadata {
                     HStack(spacing: 8) {
                         if let due = task.dueAt {
                             Label(DateFormat.relativeDay(due), systemImage: "calendar")
-                                .foregroundStyle(task.isOverdue ? Color.red : .secondary)
+                                .foregroundStyle(task.isOverdue ? theme.danger : theme.textSecondary)
                         }
                         if let projectName = model.projectName(for: task.projectID) {
                             Label(projectName, systemImage: "square.stack.3d.up")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(theme.textSecondary)
                         }
                         if let minutes = task.estimatedMinutes {
                             Label(DateFormat.duration(minutes: minutes), systemImage: "clock")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(theme.textSecondary)
                         }
                         ForEach(task.tags, id: \.self) { tag in
-                            Text("#\(tag)").foregroundStyle(.tertiary)
+                            Text("#\(tag)").foregroundStyle(theme.textTertiary)
                         }
                     }
                     .font(.caption)
@@ -156,7 +198,7 @@ struct TaskRow: View {
             if task.priority != .normal {
                 Image(systemName: task.priority.systemImage)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(task.priority == .urgent ? Color.red : .secondary)
+                    .foregroundStyle(task.priority == .urgent ? theme.danger : theme.warning)
                     .help("Öncelik: \(task.priority.displayName)")
             }
         }
@@ -174,12 +216,19 @@ struct TaskRow: View {
 // MARK: - Ayrıntı paneli
 
 struct TaskInspector: View {
+    @Environment(\.atakTheme) private var theme
     @ObservedObject var model: TasksViewModel
 
     var body: some View {
         if let draft = model.draft {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        TechLabel("Görev ayrıntısı", color: theme.accent)
+                        Spacer()
+                        Image(systemName: "slider.horizontal.3")
+                            .foregroundStyle(theme.textTertiary)
+                    }
                     TextField("Başlık", text: titleBinding, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.title3.weight(.medium))
@@ -226,18 +275,19 @@ struct TaskInspector: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Notlar").font(.caption).foregroundStyle(.secondary)
+                        Text("Notlar").font(.caption).foregroundStyle(theme.textSecondary)
                         TextEditor(text: notesBinding)
                             .font(.body)
                             .frame(minHeight: 90)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .stroke(.quaternary)
+                                    .stroke(theme.hairline)
                             )
                     }
 
                     HStack {
-                        Button("Kaydet") { Task { await model.saveDraft() } }
+                        Button("Değişiklikleri kaydet") { Task { await model.saveDraft() } }
+                            .buttonStyle(.atakPrimary)
                             .keyboardShortcut("s", modifiers: .command)
                         Spacer()
                         Button("Sil", role: .destructive) {
@@ -246,13 +296,13 @@ struct TaskInspector: View {
                     }
                     .padding(.top, 4)
 
-                    Text("Oluşturuldu: \(DateFormat.full(draft.createdAt))")
+                    Text("Oluşturuldu · \(DateFormat.full(draft.createdAt))")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(theme.textTertiary)
                 }
                 .padding(16)
             }
-            .background(.background.secondary)
+            .background(theme.surface.opacity(0.72))
         }
     }
 
@@ -261,7 +311,7 @@ struct TaskInspector: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label).font(.caption).foregroundStyle(theme.textSecondary)
             content()
         }
     }

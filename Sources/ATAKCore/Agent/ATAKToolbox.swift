@@ -256,9 +256,13 @@ public struct ATAKToolbox: Sendable {
             title: arguments["title"]?.stringValue ?? "",
             body: body
         )
+
+        guard let persisted = try await notes.find(note.id) else {
+            throw ATAKError.database("Not oluşturulduktan sonra doğrulanamadı.")
+        }
         return ToolExecutionResult(
-            content: "Not kaydedildi: \"\(note.displayTitle)\"",
-            summary: "not: \(note.displayTitle)",
+            content: "Not kaydedildi: \"\(persisted.displayTitle)\"",
+            summary: "not: \(persisted.displayTitle)",
             isError: false
         )
     }
@@ -291,9 +295,13 @@ public struct ATAKToolbox: Sendable {
             name: name,
             details: arguments["description"]?.stringValue ?? ""
         )
+
+        guard let persisted = try await projects.find(project.id) else {
+            throw ATAKError.database("Proje oluşturulduktan sonra doğrulanamadı.")
+        }
         return ToolExecutionResult(
-            content: "Proje oluşturuldu: \"\(project.name)\" (id: \(project.id.uuidString))",
-            summary: "proje: \(project.name)",
+            content: "Proje oluşturuldu: \"\(persisted.name)\" (id: \(persisted.id.uuidString))",
+            summary: "proje: \(persisted.name)",
             isError: false
         )
     }

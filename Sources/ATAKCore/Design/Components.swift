@@ -123,6 +123,7 @@ struct TechLabel: View {
 
 struct StatusIndicator: View {
     @Environment(\.atakTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let state: AgentState
     var compact: Bool = false
 
@@ -140,7 +141,7 @@ struct StatusIndicator: View {
     private var dot: some View {
         let color = tint
 
-        if state.isBusy {
+        if state.isBusy && !reduceMotion {
             // Yalnızca meşgulken animasyon çalışır; boştayken hiç CPU harcanmaz.
             Circle()
                 .fill(color)
@@ -167,6 +168,165 @@ struct StatusIndicator: View {
         case .awaitingConsent:  return theme.warning
         case .error:            return theme.danger
         default:                return theme.accent
+        }
+    }
+}
+
+// MARK: - Marka ve ekran başlığı
+
+/// Uygulama içinde kullanılan küçük ATAK işareti. Paket simgesinin yerine
+/// geçmez; sidebar ve kurulum ekranlarında aynı görsel dili taşır.
+struct ATAKLogoMark: View {
+    @Environment(\.atakTheme) private var theme
+    var size: CGFloat = 34
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [theme.accent.opacity(0.95), theme.accentMuted],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: "sparkle")
+                .font(.system(size: size * 0.43, weight: .bold))
+                .foregroundStyle(theme.background)
+        }
+        .frame(width: size, height: size)
+        .shadow(color: theme.accent.opacity(theme.glow > 0 ? 0.3 : 0.12), radius: max(4, theme.glow * 0.55))
+        .accessibilityHidden(true)
+    }
+}
+
+struct ScreenHeader: View {
+    @Environment(\.atakTheme) private var theme
+    let eyebrow: String?
+    let title: String
+    let subtitle: String?
+    let systemImage: String?
+
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        eyebrow: String? = nil,
+        systemImage: String? = nil
+    ) {
+        self.eyebrow = eyebrow
+        self.title = title
+        self.subtitle = subtitle
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 36, height: 36)
+                    .background(theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let eyebrow { TechLabel(eyebrow, color: theme.accent) }
+                Text(title)
+                    .font(theme.titleFont(size: 27, weight: .semibold))
+                    .foregroundStyle(theme.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+struct SectionTitle: View {
+    @Environment(\.atakTheme) private var theme
+    let title: String
+    let detail: String?
+
+    init(_ title: String, detail: String? = nil) {
+        self.title = title
+        self.detail = detail
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(theme.titleFont(size: 15, weight: .semibold))
+                .foregroundStyle(theme.textPrimary)
+            Spacer()
+            if let detail {
+                Text(detail)
+                    .font(theme.labelFont(size: 10.5))
+                    .foregroundStyle(theme.textTertiary)
+            }
+        }
+    }
+}
+
+struct InlineNotice: View {
+    enum Kind { case info, success, warning, error }
+
+    @Environment(\.atakTheme) private var theme
+    let kind: Kind
+    let title: String
+    let message: String?
+
+    init(_ title: String, message: String? = nil, kind: Kind = .info) {
+        self.kind = kind
+        self.title = title
+        self.message = message
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(color)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(theme.textPrimary)
+                if let message {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: theme.cornerRadiusTight, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: theme.cornerRadiusTight, style: .continuous)
+                .strokeBorder(color.opacity(0.22), lineWidth: theme.hairlineWidth)
+        }
+    }
+
+    private var icon: String {
+        switch kind {
+        case .info: return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    private var color: Color {
+        switch kind {
+        case .info: return theme.accent
+        case .success: return theme.success
+        case .warning: return theme.warning
+        case .error: return theme.danger
         }
     }
 }
@@ -232,6 +392,22 @@ struct EmptyStateView: View {
     let systemImage: String
     let title: String
     let message: String
+    let actionTitle: String?
+    let action: (() -> Void)?
+
+    init(
+        systemImage: String,
+        title: String,
+        message: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -247,8 +423,35 @@ struct EmptyStateView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
                 .fixedSize(horizontal: false, vertical: true)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.atakPrimary)
+                    .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+}
+
+// MARK: - Akış yerleşimi
+
+/// Çip ve kısa kart listelerini genişlik varsa tek satırda, yoksa yatay
+/// kaydırmada tutar. İçerik kesilmez ve dar pencerelerde taşma üretmez.
+struct FlowRow<Item: Identifiable, Content: View>: View {
+    let items: [Item]
+    @ViewBuilder let content: (Item) -> Content
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                ForEach(items) { content($0) }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items) { content($0) }
+                }
+            }
+        }
     }
 }

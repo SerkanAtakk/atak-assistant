@@ -10,6 +10,7 @@ public final class DashboardViewModel: ObservableObject {
     @Published public private(set) var overdueCount = 0
     @Published public private(set) var activeProjects: [Project] = []
     @Published public private(set) var suggestion: String?
+    @Published public private(set) var isLoading = false
     @Published public var errorMessage: String?
 
     @Published public var askText = ""
@@ -27,6 +28,9 @@ public final class DashboardViewModel: ObservableObject {
 
     public func load() async {
         guard let taskService else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
         do {
             let counts = try await taskService.counts()
             openCount = counts.open
@@ -35,6 +39,16 @@ public final class DashboardViewModel: ObservableObject {
             topTasks = try await taskService.topPriorities(limit: 3)
             activeProjects = try await projectService?.all().filter { $0.status == .active } ?? []
             suggestion = makeSuggestion()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func toggleCompleted(_ task: TaskItem) async {
+        guard let taskService else { return }
+        do {
+            try await taskService.setCompleted(task.id, task.status != .done)
+            await load()
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -14,10 +14,11 @@ public struct RootView: View {
     public var body: some View {
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 190, ideal: 208, max: 260)
+                .navigationSplitViewColumnWidth(min: 210, ideal: 224, max: 280)
         } detail: {
             content
         }
+        .navigationSplitViewStyle(.balanced)
         .environment(\.atakTheme, environment.theme)
         .tint(environment.theme.accent)
         .task {
@@ -47,13 +48,13 @@ public struct RootView: View {
         case .notes:     NotesView().atakBackground()
         case .settings:  SettingsView().atakBackground()
         case .calendar:
-            ComingSoonView(section: .calendar, note: "Takvim entegrasyonu A10 adımında geliyor.")
+            ComingSoonView(section: .calendar, note: "Takvim bağlantısı sonraki sürümler için hazırlanıyor.")
                 .atakBackground()
         case .focus:
-            ComingSoonView(section: .focus, note: "Pomodoro ve odak seansı A12 adımında geliyor.")
+            ComingSoonView(section: .focus, note: "Odak seansları sonraki sürümler için hazırlanıyor.")
                 .atakBackground()
         case .memory:
-            ComingSoonView(section: .memory, note: "ATAK Hafızası v0.2'de açılıyor.")
+            ComingSoonView(section: .memory, note: "Hafıza yönetimi hazır olduğunda burada görünecek.")
                 .atakBackground()
         }
     }
@@ -79,24 +80,77 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(theme.surface.opacity(theme.identifier == .hud ? 0.78 : 0.96))
+        .safeAreaInset(edge: .top) {
+            brandHeader
+        }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                Hairline()
-                HStack {
-                    StatusIndicator(state: environment.agentState)
-                    Spacer()
-                    Text("v\(AppInfo.version)")
-                        .font(theme.labelFont(size: 9.5))
+            sidebarFooter
+        }
+    }
+
+    private var brandHeader: some View {
+        Button {
+            router.select(.chat)
+        } label: {
+            HStack(spacing: 11) {
+                ATAKLogoMark(size: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("ATAK")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(theme.textPrimary)
+                    Text("Kişisel asistan")
+                        .font(.system(size: 10.5))
                         .foregroundStyle(theme.textTertiary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                Spacer()
             }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
+        .buttonStyle(.plain)
+        .background(theme.surface.opacity(0.98))
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    private var sidebarFooter: some View {
+        VStack(spacing: 0) {
+            Hairline()
+            Button {
+                router.select(environment.isAIReady ? .chat : .settings)
+            } label: {
+                HStack(spacing: 9) {
+                    StatusIndicator(state: environment.isAIReady ? environment.agentState : .offline, compact: true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(environment.isAIReady ? environment.agentState.displayName : "Kurulum gerekli")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(theme.textPrimary)
+                        Text(environment.isAIReady ? environment.aiConfiguration.info.displayName : "Yapay zekâyı bağla")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(theme.textTertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Text("v\(AppInfo.version)")
+                        .font(theme.labelFont(size: 9))
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+        }
+        .background(theme.surface.opacity(0.98))
     }
 
     private func row(_ section: AppSection) -> some View {
         Label(section.title, systemImage: section.systemImage)
+            .font(.system(size: 13, weight: router.section == section ? .semibold : .regular))
+            .foregroundStyle(router.section == section ? theme.textPrimary : theme.textSecondary)
+            .padding(.vertical, 3)
             .tag(section)
     }
 
@@ -116,8 +170,16 @@ struct LoadingView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            ProgressView()
-            TechLabel("ATAK hazırlanıyor", color: theme.textSecondary)
+            ATAKLogoMark(size: 48)
+            ProgressView().controlSize(.small)
+            VStack(spacing: 3) {
+                Text("Çalışma alanın hazırlanıyor")
+                    .font(theme.titleFont(size: 15))
+                    .foregroundStyle(theme.textPrimary)
+                Text("Verilerin ve asistan bağlantın kontrol ediliyor.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.textSecondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .atakBackground()

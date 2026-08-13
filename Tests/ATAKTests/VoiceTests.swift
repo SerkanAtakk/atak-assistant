@@ -59,10 +59,10 @@ struct SpeechTextTests {
 @Suite("Ses ayarları")
 struct VoiceSettingsTests {
 
-    @Test("Varsayılanlar açık")
-    func defaultsAreOn() {
-        #expect(VoiceSettings.default.greetOnLaunch)
-        #expect(VoiceSettings.default.speakReplies)
+    @Test("Ses varsayılan olarak kapalı")
+    func defaultsAreOff() {
+        #expect(!VoiceSettings.default.greetOnLaunch)
+        #expect(!VoiceSettings.default.speakReplies)
     }
 
     @Test("Ayarlar gidiş-dönüş kodlanır")

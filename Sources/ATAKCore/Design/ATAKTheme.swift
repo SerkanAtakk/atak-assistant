@@ -133,7 +133,7 @@ public struct ATAKTheme: Sendable, Equatable, Identifiable {
         accentMuted:    .adaptive(light: 0x7FC6BC, dark: 0x1C6F65),
         textPrimary:    .adaptive(light: 0x0B1418, dark: 0xE6F1F3),
         textSecondary:  .adaptive(light: 0x4A5B62, dark: 0x8FA3AC),
-        textTertiary:   .adaptive(light: 0x8496A0, dark: 0x55666F),
+        textTertiary:   .adaptive(light: 0x5F747E, dark: 0x8798A0),
         success:        .adaptive(light: 0x0E8A5F, dark: 0x3FD99B),
         warning:        .adaptive(light: 0xA86A00, dark: 0xF2B25C),
         danger:         .adaptive(light: 0xC0392B, dark: 0xFF6B6B),
@@ -159,7 +159,7 @@ public struct ATAKTheme: Sendable, Equatable, Identifiable {
         accentMuted:    .adaptive(light: 0xB5AFF2, dark: 0x413A87),
         textPrimary:    .adaptive(light: 0x16161A, dark: 0xF2F2F5),
         textSecondary:  .adaptive(light: 0x5C5C66, dark: 0x9B9BA6),
-        textTertiary:   .adaptive(light: 0x8E8E99, dark: 0x63636E),
+        textTertiary:   .adaptive(light: 0x686874, dark: 0x92929D),
         success:        .adaptive(light: 0x1B8A50, dark: 0x4ED18A),
         warning:        .adaptive(light: 0xB0740C, dark: 0xE8B15A),
         danger:         .adaptive(light: 0xC7362C, dark: 0xF87171),
@@ -184,7 +184,7 @@ public struct ATAKTheme: Sendable, Equatable, Identifiable {
 // MARK: - Ortam anahtarı
 
 private struct ATAKThemeKey: EnvironmentKey {
-    static let defaultValue: ATAKTheme = .hud
+    static let defaultValue: ATAKTheme = .minimal
 }
 
 extension EnvironmentValues {

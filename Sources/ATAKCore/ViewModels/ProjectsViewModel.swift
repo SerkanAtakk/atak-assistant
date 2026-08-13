@@ -15,6 +15,7 @@ public final class ProjectsViewModel: ObservableObject {
 
     private var projectService: ProjectService?
     private var taskService: TaskService?
+    private weak var router: AppRouter?
 
     public init() {}
 
@@ -22,6 +23,7 @@ public final class ProjectsViewModel: ObservableObject {
         guard projectService == nil else { return }
         projectService = environment.projects
         taskService = environment.tasks
+        router = environment.router
     }
 
     public func load() async {
@@ -29,6 +31,11 @@ public final class ProjectsViewModel: ObservableObject {
         do {
             projects = try await projectService.all()
             progress = try await projectService.progressByProject()
+            if let requested = router?.selectedProjectID,
+               projects.contains(where: { $0.id == requested }) {
+                selectedID = requested
+                router?.selectedProjectID = nil
+            }
             if let selectedID, !projects.contains(where: { $0.id == selectedID }) {
                 self.selectedID = nil
             } else {

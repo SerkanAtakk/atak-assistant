@@ -6,7 +6,7 @@ public struct VoiceSettings: Sendable, Codable, Equatable {
     /// Uygulama açılınca ATAK seni sesli karşılasın mı.
     public var greetOnLaunch: Bool
 
-    public init(speakReplies: Bool = true, greetOnLaunch: Bool = true) {
+    public init(speakReplies: Bool = false, greetOnLaunch: Bool = false) {
         self.speakReplies = speakReplies
         self.greetOnLaunch = greetOnLaunch
     }
@@ -21,8 +21,8 @@ public struct VoiceSettings: Sendable, Codable, Equatable {
     /// silmesin (bkz. `AIConfiguration.init(from:)`).
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.speakReplies = try container.decodeIfPresent(Bool.self, forKey: .speakReplies) ?? true
-        self.greetOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .greetOnLaunch) ?? true
+        self.speakReplies = try container.decodeIfPresent(Bool.self, forKey: .speakReplies) ?? false
+        self.greetOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .greetOnLaunch) ?? false
     }
 }
 

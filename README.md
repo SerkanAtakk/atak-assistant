@@ -2,10 +2,18 @@
 
 A native macOS personal AI assistant, built **without Xcode** — pure SwiftPM, zero third‑party dependencies.
 
-ATAK is not a chat wrapper. It remembers, plans, and actually *does* things: ask it to "add a gym task for tomorrow at 6pm" and it creates the task, then verifies the write before claiming success.
+ATAK is more than a chat wrapper. It combines AI chat with tasks, projects and searchable notes, and can safely perform these actions through its built-in tools. Ask it to "add a gym task for tomorrow at 6pm" and it creates the task, then verifies the write before claiming success.
 
 > Türkçe konuşan bir asistan olarak tasarlandı; arayüz ve sistem promptu Türkçedir.
 > Mimari dokümanı: [`docs/MIMARI.md`](docs/MIMARI.md) (Türkçe, 16 bölüm).
+
+![ATAK dashboard](docs/screenshots/dashboard.png)
+
+| Chat with tool use | Provider settings |
+|---|---|
+| ![Chat](docs/screenshots/chat.png) | ![Settings](docs/screenshots/settings.png) |
+
+<sub>Screenshots are rendered by the app itself — <code>ATAK_SHOT=&lt;dir&gt; open -a ATAK</code> adds a capture menu item that draws the window's own view hierarchy to PNG. No Screen Recording permission involved, and no desktop or cursor bleeding into the frame. See <a href="Sources/ATAKCore/Utilities/WindowCapture.swift"><code>WindowCapture.swift</code></a>.</sub>
 
 ---
 
@@ -27,13 +35,11 @@ Those turned out to be reasonable trades: SQLite gives full‑text search over n
 ## Architecture
 
 ```
-Views + ViewModels          SwiftUI, theme tokens, no colour constants
+Views + ViewModels          SwiftUI, reusable components, two themes
         │
 AgentRuntime                budgeted tool loop, cancellable
         │
-Risk / Permissions          risk levels, consent gates
-        │
-AI providers · Tools · Memory
+AI providers · Local tools · Voice
         │
 SQLite (WAL + FTS5) · Keychain · Speech · AVFoundation
 ```
@@ -74,8 +80,8 @@ Requires macOS 14+, Swift 6.0+, Command Line Tools. **No Xcode needed.**
 
 ```bash
 make run       # build, bundle, ad-hoc sign, launch
-make test      # 100 tests
-make smoke     # headless start-up + DB + FTS5 round trip
+make test      # 112 tests
+make smoke     # isolated headless start-up + DB + FTS5 round trip
 make install   # copy to /Applications
 ```
 
@@ -85,9 +91,9 @@ Data lives in a single file: `~/Library/Application Support/ATAK/atak.db`.
 
 ## Status
 
-**v0.1 — working.** Chat with tool use, tasks, projects, notes with FTS5 search, voice in/out, two themes, multi‑provider AI, Privacy Mode. 100 tests green.
+**v0.2 — professional foundation.** The default Minimal interface now has a consistent three-column chat, actionable dashboard, polished empty/loading/error states, provider onboarding, menu-bar lifecycle and a real application icon. Chat with tool use, tasks, projects, notes with FTS5 search, opt-in voice, two themes and multi-provider AI are working. Privacy Mode keeps both messages and conversation metadata memory-only; note autosave survives fast selection changes. Cloud credentials are restricted to official HTTPS endpoints, Ollama overrides are validated, and local database files use private permissions. 112 tests are green.
 
-Not yet: calendar (EventKit), documents/PDF, focus timer, long‑term memory UI, automations. See [`docs/MIMARI.md`](docs/MIMARI.md) §15 for the roadmap.
+Next roadmap: explicit consent/audit/undo for higher-risk tools, stricter end-to-end network deadlines, calendar (EventKit), documents/PDF, focus timer, long-term memory UI, automations and broader UI/provider test coverage. See [`docs/MIMARI.md`](docs/MIMARI.md) §15.
 
 ## License
 

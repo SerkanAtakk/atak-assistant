@@ -27,6 +27,12 @@ public struct ConversationService: Sendable {
     @discardableResult
     public func create(title: String = "", isPrivate: Bool = false) async throws -> Conversation {
         let conversation = Conversation(title: title, isPrivate: isPrivate)
+
+        // Privacy Mode'da başlık, kimlik ve zaman damgası dâhil sohbet
+        // metadatası diske hiç değmez. ChatViewModel bu değeri ve mesajlarını
+        // yalnız bellekte tutar; araçların kendi kalıcılığı bundan bağımsızdır.
+        guard !isPrivate else { return conversation }
+
         try await database.run(
             """
             INSERT INTO conversation (id, title, mode, started_at, last_message_at, is_private, archived)

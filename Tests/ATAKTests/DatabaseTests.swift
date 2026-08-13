@@ -24,6 +24,68 @@ final class TestDatabase: Sendable {
     }
 }
 
+private func posixPermissions(of url: URL) throws -> Int {
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    return try #require((attributes[.posixPermissions] as? NSNumber)?.intValue) & 0o777
+}
+
+// MARK: - Dosya güvenliği
+
+@Suite("Veritabanı dosya güvenliği")
+struct DatabaseFileSecurityTests {
+
+    @Test("Klasör 0700, DB/WAL/SHM dosyaları 0600 yapılır")
+    func hardensExistingAndCompanionFiles() async throws {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
+            .appending(path: "atak-permissions-\(UUID().uuidString)")
+        let databaseURL = directory.appending(path: "atak.db")
+        defer { try? fileManager.removeItem(at: directory) }
+
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: directory.path)
+        try Data().write(to: databaseURL)
+        try fileManager.setAttributes([.posixPermissions: 0o666], ofItemAtPath: databaseURL.path)
+
+        let database = try Database(path: databaseURL)
+        try await database.migrate()
+
+        let walURL = URL(fileURLWithPath: databaseURL.path + "-wal")
+        let shmURL = URL(fileURLWithPath: databaseURL.path + "-shm")
+        try #require(fileManager.fileExists(atPath: walURL.path))
+        try #require(fileManager.fileExists(atPath: shmURL.path))
+
+        #expect(try posixPermissions(of: directory) == 0o700)
+        #expect(try posixPermissions(of: databaseURL) == 0o600)
+        #expect(try posixPermissions(of: walURL) == 0o600)
+        #expect(try posixPermissions(of: shmURL) == 0o600)
+
+        // SQLite eşlikçi dosyaları daha sonra yeniden oluşturabilir. Her DB
+        // erişimi güvenli modu yeniden doğrulamalı ve düzeltebilmelidir.
+        try fileManager.setAttributes([.posixPermissions: 0o666], ofItemAtPath: walURL.path)
+        try fileManager.setAttributes([.posixPermissions: 0o666], ofItemAtPath: shmURL.path)
+        _ = try await database.healthCheck()
+
+        #expect(try posixPermissions(of: walURL) == 0o600)
+        #expect(try posixPermissions(of: shmURL) == 0o600)
+    }
+
+    @Test("Dosya güvenliği hazırlama hatası uygulama hata tipine çevrilir")
+    func reportsSecurityPreparationFailure() {
+        let impossiblePath = URL(fileURLWithPath: "/dev/null/atak-\(UUID().uuidString).db")
+        #expect(throws: ATAKError.self) {
+            _ = try Database(path: impossiblePath)
+        }
+    }
+
+    @Test("Bellek içi veritabanı dosya oluşturmadan çalışır")
+    func inMemoryDatabaseRemainsInMemory() async throws {
+        let database = try Database.inMemory()
+        try await database.migrate()
+        #expect(try await database.currentSchemaVersion() == Migrator.all.count)
+    }
+}
+
 // MARK: - Şema
 
 @Suite("Şema ve migrasyon")

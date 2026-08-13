@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public struct ChatView: View {
 
@@ -13,7 +14,7 @@ public struct ChatView: View {
     public var body: some View {
         HStack(spacing: 0) {
             conversationList
-                .frame(width: 210)
+                .frame(width: 238)
             Rectangle().fill(theme.hairline).frame(width: theme.hairlineWidth)
             conversationColumn
         }
@@ -21,6 +22,9 @@ public struct ChatView: View {
         .task {
             model.configure(environment)
             await model.load()
+            if let prompt = router.consumeChatPrompt() {
+                model.input = prompt
+            }
             model.greetIfNeeded()
         }
     }
@@ -29,21 +33,51 @@ public struct ChatView: View {
 
     private var conversationList: some View {
         VStack(spacing: 0) {
-            Button {
-                model.startNewConversation()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                    Text("Yeni sohbet")
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    TechLabel("Sohbet geçmişi")
                     Spacer()
+                    Text("\(model.conversations.count)")
+                        .font(theme.numericFont(size: 9.5, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
                 }
-                .contentShape(Rectangle())
+                Button {
+                    model.startNewConversation()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "square.and.pencil")
+                        Text("Yeni sohbet")
+                        Spacer()
+                        Text("⌘N")
+                            .font(theme.labelFont(size: 9))
+                            .foregroundStyle(theme.textTertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.atakSecondary)
+                .keyboardShortcut("n", modifiers: .command)
             }
-            .buttonStyle(.atakSecondary)
-            .padding(10)
+            .padding(12)
+
+            Hairline()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
+                    if model.conversations.isEmpty {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 18, weight: .light))
+                                .foregroundStyle(theme.textTertiary)
+                            Text("Sohbetlerin burada görünür")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundStyle(theme.textSecondary)
+                            Text("Özel moddaki konuşmalar kaydedilmez.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                    }
                     ForEach(model.conversations) { conversation in
                         conversationRow(conversation)
                     }
@@ -53,6 +87,7 @@ public struct ChatView: View {
 
             Spacer(minLength: 0)
         }
+        .background(theme.surface.opacity(theme.identifier == .hud ? 0.48 : 0.8))
     }
 
     private func conversationRow(_ conversation: Conversation) -> some View {
@@ -61,20 +96,26 @@ public struct ChatView: View {
         return Button {
             Task { await model.select(conversation) }
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(conversation.displayTitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(isActive ? theme.textPrimary : theme.textSecondary)
-                    .lineLimit(1)
-                if let date = conversation.lastMessageAt ?? Optional(conversation.startedAt) {
-                    Text(DateFormat.relativeDay(date))
-                        .font(theme.labelFont(size: 9.5))
-                        .foregroundStyle(theme.textTertiary)
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(isActive ? theme.accent : theme.textTertiary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(conversation.displayTitle)
+                        .font(.system(size: 11.5, weight: isActive ? .medium : .regular))
+                        .foregroundStyle(isActive ? theme.textPrimary : theme.textSecondary)
+                        .lineLimit(1)
+                    if let date = conversation.lastMessageAt ?? Optional(conversation.startedAt) {
+                        Text(DateFormat.relativeDay(date))
+                            .font(theme.labelFont(size: 9))
+                            .foregroundStyle(theme.textTertiary)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 9)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background {
                 RoundedRectangle(cornerRadius: theme.cornerRadiusTight, style: .continuous)
                     .fill(isActive ? theme.accent.opacity(0.14) : .clear)
@@ -108,18 +149,34 @@ public struct ChatView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            StatusIndicator(state: environment.agentState)
-            Spacer()
-            TechLabel(model.providerLabel)
-            if model.isRunning {
-                Button("Durdur") { model.stop() }
-                    .buttonStyle(.atakSecondary)
-                    .controlSize(.small)
+        HStack(spacing: 12) {
+            ATAKLogoMark(size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.activeConversation?.displayTitle ?? "Yeni sohbet")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+                StatusIndicator(state: environment.isAIReady ? environment.agentState : .offline)
             }
+            Spacer()
+            if environment.aiConfiguration.privateMode {
+                Label("Diske kaydetme kapalı", systemImage: "eye.slash.fill")
+                    .font(theme.labelFont(size: 9.5))
+                    .foregroundStyle(theme.warning)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(theme.warning.opacity(0.1), in: Capsule())
+            }
+            Text(model.providerLabel)
+                .font(theme.labelFont(size: 9.5))
+                .foregroundStyle(theme.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 220)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(theme.surface.opacity(0.5))
     }
 
     private var transcript: some View {
@@ -144,11 +201,11 @@ public struct ChatView: View {
                     }
 
                     if !model.liveBadges.isEmpty {
-                        HStack(spacing: 6) {
-                            ForEach(model.liveBadges) { badge in
+                        VStack(alignment: .leading, spacing: 7) {
+                            TechLabel("Yapılan işlemler")
+                            FlowRow(items: model.liveBadges) { badge in
                                 ToolBadgeView(name: badge.name, detail: badge.summary, isError: badge.isError)
                             }
-                            Spacer()
                         }
                         .id(Self.badgeAnchor)
                     }
@@ -158,9 +215,9 @@ public struct ChatView: View {
                             .id(Self.errorAnchor)
                     }
                 }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 20)
-                .frame(maxWidth: 780, alignment: .leading)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 820, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: model.streamingText) { _, _ in
@@ -183,63 +240,82 @@ public struct ChatView: View {
     // MARK: - Karşılama
 
     private var welcome: some View {
-        VStack(spacing: 18) {
+        ScrollView {
+        VStack(spacing: 20) {
             Spacer()
 
             VStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(theme.accent)
-                    .shadow(color: theme.glow > 0 ? theme.accent.opacity(0.5) : .clear, radius: theme.glow)
+                ATAKLogoMark(size: 52)
 
                 Text(model.isConfigured ? environment.greeting : "ATAK hazır")
-                    .font(theme.titleFont(size: 20))
+                    .font(theme.titleFont(size: 22))
                     .foregroundStyle(theme.textPrimary)
                     .multilineTextAlignment(.center)
 
                 Text(model.isConfigured
-                     ? "Yazabilir ya da mikrofona basıp konuşabilirsin. Görev, not ve proje oluşturabilirim."
-                     : "Başlamak için bir yapay zekâ sağlayıcısı bağlaman gerekiyor.")
+                     ? "Düşüncelerini netleştirebilir, görevlerini ve notlarını doğrudan düzenleyebilirim."
+                     : "İki dakikalık bağlantı adımından sonra kişisel çalışma alanın hazır olacak.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 400)
+                    .frame(maxWidth: 430)
             }
 
             if model.isConfigured {
-                FlowRow(items: ChatViewModel.suggestions.map(Suggestion.init)) { suggestion in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 9)], spacing: 9) {
+                    ForEach(ChatViewModel.suggestions.map(Suggestion.init)) { suggestion in
                     Button {
                         model.input = suggestion.text
                     } label: {
-                        Text(suggestion.text)
-                            .font(.system(size: 11.5))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                        HStack(spacing: 8) {
+                            Image(systemName: suggestion.icon)
+                                .foregroundStyle(theme.accent)
+                            Text(suggestion.text)
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(theme.textSecondary)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 9)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(theme.textSecondary)
-                    .background {
-                        Capsule().fill(theme.surfaceRaised.opacity(theme.panelOpacity))
-                    }
-                    .overlay {
-                        Capsule().strokeBorder(theme.hairline, lineWidth: theme.hairlineWidth)
+                    .panel(raised: true)
                     }
                 }
+                .frame(maxWidth: 540)
             } else {
-                Button("Sağlayıcı bağla") { router.select(.settings) }
-                    .buttonStyle(.atakPrimary)
+                VStack(spacing: 12) {
+                    HStack(spacing: 16) {
+                        SetupStep(number: "1", title: "Sağlayıcı seç", detail: "Gemini, Groq, Claude veya yerel Ollama")
+                        SetupStep(number: "2", title: "Güvenle bağla", detail: "Anahtar yalnız Keychain'de saklanır")
+                        SetupStep(number: "3", title: "İlk işi ver", detail: "ATAK sonucu doğrulayarak kaydeder")
+                    }
+                    Button("Kurulumu tamamla") { router.select(.settings) }
+                        .buttonStyle(.atakPrimary)
+                }
+                .frame(maxWidth: 650)
             }
 
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .padding(30)
+        .padding(34)
+        }
     }
 
     private struct Suggestion: Identifiable {
         let text: String
         var id: String { text }
         init(_ text: String) { self.text = text }
+
+        var icon: String {
+            if text.contains("spor") { return "figure.run" }
+            if text.contains("not") { return "note.text" }
+            if text.contains("hafta") { return "calendar" }
+            return "sparkles"
+        }
     }
 
     // MARK: - Yazma alanı
@@ -272,16 +348,15 @@ public struct ChatView: View {
                 }
 
                 Button {
-                    model.send()
+                    model.isRunning ? model.stop() : model.send()
                 } label: {
-                    Image(systemName: "arrow.up")
+                    Image(systemName: model.isRunning ? "stop.fill" : "arrow.up")
                         .font(.system(size: 12, weight: .bold))
                         .frame(width: 15, height: 15)
                 }
                 .buttonStyle(.atakPrimary)
                 .disabled(
-                    model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || model.isRunning
+                    (!model.isRunning && model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     || !model.isConfigured
                 )
                 .keyboardShortcut(.return, modifiers: [])
@@ -331,7 +406,7 @@ public struct ChatView: View {
             if environment.aiConfiguration.privateMode {
                 HStack(spacing: 5) {
                     Image(systemName: "eye.slash")
-                    Text("Privacy Mode açık — bu sohbet diske kaydedilmiyor")
+                    Text("Özel mod: bu sohbet diske yazılmaz. Bulut sağlayıcısı seçiliyse mesaj yine sağlayıcıya gönderilir.")
                     Spacer()
                 }
                 .font(theme.labelFont(size: 10))
@@ -377,6 +452,33 @@ public struct ChatView: View {
     }
 }
 
+private struct SetupStep: View {
+    @Environment(\.atakTheme) private var theme
+    let number: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(number)
+                .font(theme.numericFont(size: 10, weight: .bold))
+                .foregroundStyle(theme.background)
+                .frame(width: 22, height: 22)
+                .background(theme.accent, in: Circle())
+            Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(theme.textPrimary)
+            Text(detail)
+                .font(.system(size: 9.5))
+                .foregroundStyle(theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 105, alignment: .topLeading)
+        .panel(raised: true)
+    }
+}
+
 // MARK: - Mesaj satırı
 
 struct MessageRow: View {
@@ -385,41 +487,63 @@ struct MessageRow: View {
     var isStreaming: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 7) {
-                TechLabel(
-                    message.role == .user ? "SEN" : "ATAK",
-                    color: message.role == .user ? theme.textTertiary : theme.accent
-                )
-                if isStreaming {
-                    TypingIndicator()
+        HStack(alignment: .top, spacing: 10) {
+            if message.role == .user { Spacer(minLength: 72) }
+
+            if message.role != .user {
+                ATAKLogoMark(size: 27)
+            }
+
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 7) {
+                HStack(spacing: 7) {
+                    if message.role == .user { Spacer() }
+                    TechLabel(
+                        message.role == .user ? "Sen" : "ATAK",
+                        color: message.role == .user ? theme.textTertiary : theme.accent
+                    )
+                    if isStreaming { TypingIndicator() }
+                    Text(DateFormat.relativeDay(message.createdAt))
+                        .font(theme.labelFont(size: 8.5))
+                        .foregroundStyle(theme.textTertiary)
+                    if message.role != .user { Spacer() }
                 }
-                Spacer()
-            }
 
-            if !message.text.isEmpty {
-                Text(Self.rendered(message.text))
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(theme.textPrimary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                if !message.text.isEmpty {
+                    Text(Self.rendered(message.text))
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(theme.textPrimary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, message.role == .user ? 13 : 15)
+                        .padding(.vertical, message.role == .user ? 10 : 13)
+                        .background {
+                            RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
+                                .fill(message.role == .user ? theme.accent.opacity(0.13) : theme.surface.opacity(0.88))
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
+                                .strokeBorder(message.role == .user ? theme.accent.opacity(0.22) : theme.hairline,
+                                              lineWidth: theme.hairlineWidth)
+                        }
+                        .contextMenu {
+                            Button("Metni kopyala") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(message.text, forType: .string)
+                            }
+                        }
+                }
 
-            if !message.toolCalls.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(message.toolCalls) { call in
-                        ToolBadgeView(
-                            name: ChatEngine.friendlyName(call.name),
-                            detail: nil,
-                            isError: false
-                        )
+                if !message.toolCalls.isEmpty {
+                    FlowRow(items: message.toolCalls) { call in
+                        ToolBadgeView(name: ChatEngine.friendlyName(call.name), detail: nil, isError: false)
                     }
-                    Spacer()
                 }
             }
+            .frame(maxWidth: message.role == .user ? 560 : .infinity, alignment: message.role == .user ? .trailing : .leading)
+
+            if message.role != .user { Spacer(minLength: 24) }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, message.role == .user ? 0 : 0)
+        .frame(maxWidth: .infinity)
     }
 
     /// Basit markdown (kalın, italik, kod) desteklenir; satır düzeni korunur.

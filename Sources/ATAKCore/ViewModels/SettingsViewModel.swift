@@ -123,9 +123,26 @@ public final class SettingsViewModel: ObservableObject {
 
     public func commitBaseURL() {
         guard let environment else { return }
-        var updated = configuration
-        updated.baseURLOverride = baseURLDraft.trimmingCharacters(in: .whitespaces).nilIfEmpty
-        environment.updateConfiguration(updated)
+        let custom = baseURLDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        do {
+            _ = try AIProviderCatalog.validatedBaseURL(
+                for: configuration.providerID,
+                override: custom
+            )
+            var updated = configuration
+            updated.baseURLOverride = custom
+            environment.updateConfiguration(updated)
+            baseURLDraft = custom ?? ""
+            testFailure = nil
+            notice = custom == nil ? "Varsayılan sunucu adresi kullanılıyor." : "Sunucu adresi güncellendi."
+        } catch {
+            baseURLDraft = configuration.baseURLOverride ?? ""
+            notice = nil
+            testFailure = error.localizedDescription
+        }
     }
 
     public func setAllowTools(_ value: Bool) {

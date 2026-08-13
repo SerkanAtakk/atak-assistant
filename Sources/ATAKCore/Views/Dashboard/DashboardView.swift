@@ -4,210 +4,342 @@ public struct DashboardView: View {
 
     @EnvironmentObject private var environment: AppEnvironment
     @EnvironmentObject private var router: AppRouter
+    @Environment(\.atakTheme) private var theme
     @StateObject private var model = DashboardViewModel()
 
     public init() {}
 
     public var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 24) {
                 header
-                summaryRow
-                prioritiesSection
-                if let suggestion = model.suggestion {
-                    SuggestionCard(text: suggestion)
+
+                if let error = model.errorMessage {
+                    InlineNotice("Güncel bilgiler alınamadı", message: error, kind: .error)
                 }
-                projectsSection
-                askSection
+
+                summaryGrid
+                prioritiesPanel
+
+                if let suggestion = model.suggestion {
+                    suggestionPanel(suggestion)
+                }
+
+                projectsPanel
+                askPanel
             }
-            .padding(26)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 980, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationTitle("Bugün")
-        .task {
+        .task(id: router.section) {
+            guard router.section == .dashboard else { return }
             model.configure(environment)
             await model.load()
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(model.greeting)
-                .font(.largeTitle.weight(.semibold))
-            Text(model.todayLine)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 18) {
+            ScreenHeader(
+                "\(DateFormat.greeting())\(environment.userName.isEmpty ? "" : ", \(environment.userName)")",
+                subtitle: model.todayLine,
+                eyebrow: "Günün özeti",
+                systemImage: "sun.max.fill"
+            )
+            Spacer(minLength: 12)
+            HStack(spacing: 8) {
+                StatusIndicator(state: environment.isAIReady ? environment.agentState : .offline, compact: true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(environment.isAIReady ? "Asistan hazır" : "Kurulum gerekli")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(theme.textPrimary)
+                    Text(environment.isAIReady ? environment.aiConfiguration.info.displayName : "Bağlantı yok")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(theme.textTertiary)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .panel(raised: true)
         }
     }
 
-    private var summaryRow: some View {
-        HStack(spacing: 12) {
-            SummaryTile(
+    private var summaryGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+            DashboardMetricCard(
                 value: "\(model.openCount)",
-                label: "açık görev",
+                label: "Açık görev",
+                detail: model.openCount == 0 ? "Listen temiz" : "Takipte",
                 systemImage: "checklist",
-                tint: .blue
-            )
-            SummaryTile(
+                tint: theme.accent
+            ) { router.select(.tasks) }
+
+            DashboardMetricCard(
                 value: "\(model.dueTodayCount)",
-                label: "bugün bitiyor",
-                systemImage: "calendar",
-                tint: .orange
-            )
-            SummaryTile(
+                label: "Bugün bitiyor",
+                detail: model.dueTodayCount == 0 ? "Takvim rahat" : "Bugünün odağı",
+                systemImage: "calendar.badge.clock",
+                tint: theme.warning
+            ) { router.select(.tasks) }
+
+            DashboardMetricCard(
                 value: "\(model.overdueCount)",
-                label: "gecikmiş",
-                systemImage: "exclamationmark.triangle",
-                tint: model.overdueCount > 0 ? .red : .secondary
-            )
+                label: "Gecikmiş",
+                detail: model.overdueCount == 0 ? "Her şey yolunda" : "Öncelik ver",
+                systemImage: model.overdueCount == 0 ? "checkmark.shield" : "exclamationmark.triangle",
+                tint: model.overdueCount == 0 ? theme.success : theme.danger
+            ) { router.select(.tasks) }
         }
+        .redacted(reason: model.isLoading ? .placeholder : [])
     }
 
-    private var prioritiesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var prioritiesPanel: some View {
+        VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Text("Öncelikler").font(.headline)
-                Spacer()
-                Button("Tümü") { router.select(.tasks) }
-                    .buttonStyle(.link)
+                SectionTitle("Önceliklerin", detail: model.topTasks.isEmpty ? nil : "ilk \(model.topTasks.count)")
+                Button("Tüm görevler") { router.select(.tasks) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(theme.accent)
             }
 
-            if model.topTasks.isEmpty {
-                Text("Öncelikli görev yok.")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 6)
-            } else {
-                ForEach(Array(model.topTasks.enumerated()), id: \.element.id) { index, task in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text("\(index + 1).")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(task.title)
-                            HStack(spacing: 8) {
-                                if let due = task.dueAt {
-                                    Label(DateFormat.relativeDay(due), systemImage: "calendar")
-                                        .foregroundStyle(task.isOverdue ? Color.red : .secondary)
-                                }
-                                if task.priority != .normal {
-                                    Label(task.priority.displayName, systemImage: task.priority.systemImage)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .font(.caption)
-                        }
-                        Spacer()
+            if model.topTasks.isEmpty && !model.isLoading {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(theme.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Öncelikli bir iş görünmüyor")
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(theme.textPrimary)
+                        Text("Yeni bir görev ekleyebilir veya ATAK ile gününü planlayabilirsin.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(theme.textSecondary)
                     }
-                    .padding(.vertical, 4)
+                    Spacer()
+                }
+                .padding(.vertical, 5)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(model.topTasks.enumerated()), id: \.element.id) { index, task in
+                        priorityRow(task, index: index)
+                        if task.id != model.topTasks.last?.id { Hairline() }
+                    }
                 }
             }
         }
+        .padding(17)
+        .panel()
+        .redacted(reason: model.isLoading ? .placeholder : [])
+    }
+
+    private func priorityRow(_ task: TaskItem, index: Int) -> some View {
+        HStack(spacing: 11) {
+            Button {
+                Task { await model.toggleCompleted(task) }
+            } label: {
+                Image(systemName: task.status == .done ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(task.status == .done ? theme.success : theme.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help(task.status == .done ? "Yeniden aç" : "Tamamlandı olarak işaretle")
+
+            Button {
+                router.openTask(task.id)
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(task.title)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(theme.textPrimary)
+                            .lineLimit(1)
+                        HStack(spacing: 9) {
+                            if let due = task.dueAt {
+                                Label(DateFormat.relativeDay(due), systemImage: "calendar")
+                                    .foregroundStyle(task.isOverdue ? theme.danger : theme.textSecondary)
+                            }
+                            if task.priority != .normal {
+                                Label(task.priority.displayName, systemImage: task.priority.systemImage)
+                                    .foregroundStyle(task.priority >= .high ? theme.warning : theme.textSecondary)
+                            }
+                        }
+                        .font(.system(size: 10.5))
+                    }
+                    Spacer()
+                    Text(String(format: "%02d", index + 1))
+                        .font(theme.numericFont(size: 10, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func suggestionPanel(_ suggestion: String) -> some View {
+        HStack(alignment: .top, spacing: 13) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(theme.accent)
+                .frame(width: 34, height: 34)
+                .background(theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 4) {
+                TechLabel("ATAK önerisi", color: theme.accent)
+                Text(suggestion)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            Button("Birlikte planla") {
+                router.openChat(with: "Bugünkü işlerimi önceliklendirip uygulanabilir kısa bir plan çıkar.")
+            }
+            .buttonStyle(.atakSecondary)
+        }
+        .padding(17)
+        .panel(raised: true, accented: true)
     }
 
     @ViewBuilder
-    private var projectsSection: some View {
+    private var projectsPanel: some View {
         if !model.activeProjects.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Aktif projeler").font(.headline)
-                    Spacer()
-                    Button("Tümü") { router.select(.projects) }
-                        .buttonStyle(.link)
+                    SectionTitle("Aktif projeler", detail: "\(model.activeProjects.count) proje")
+                    Button("Tümünü gör") { router.select(.projects) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(theme.accent)
                 }
-                FlowRow(items: model.activeProjects) { project in
-                    HStack(spacing: 6) {
-                        Circle().fill(project.color.color).frame(width: 7, height: 7)
-                        Text(project.name).font(.callout)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
+                    ForEach(model.activeProjects.prefix(6)) { project in
+                        Button {
+                            router.openProject(project.id)
+                        } label: {
+                            HStack(spacing: 10) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(project.color.color)
+                                    .frame(width: 4, height: 30)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(project.name)
+                                        .font(.system(size: 12.5, weight: .medium))
+                                        .foregroundStyle(theme.textPrimary)
+                                        .lineLimit(1)
+                                    Text(project.deadline.map(DateFormat.relativeDay) ?? "Son tarih yok")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(theme.textTertiary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(theme.textTertiary)
+                            }
+                            .padding(12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .panel(raised: true)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.quaternary, in: Capsule())
                 }
             }
         }
     }
 
-    private var askSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("ATAK'a Sor").font(.headline)
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(.tint)
-                TextField("Bugün ne yapmalıyım?", text: $model.askText)
-                    .textFieldStyle(.plain)
-                    .onSubmit { router.select(.chat) }
+    private var askPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Aklındakini ATAK'a bırak")
+                        .font(theme.titleFont(size: 16, weight: .semibold))
+                        .foregroundStyle(theme.textPrimary)
+                    Text("Plan oluştur, bir şeyi not al veya görevlerini düzenle.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "command")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(theme.textTertiary)
+                    .padding(6)
+                    .background(theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 9))
 
-            Text("Sohbet A7 adımında bağlanıyor. Şu an görev, proje ve notların tamamen çalışıyor.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(theme.accent)
+                TextField("Örn. Bu haftayı benimle planla", text: $model.askText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .onSubmit { openAsk() }
+                Button(action: openAsk) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.atakPrimary)
+                .disabled(model.askText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .panel(raised: true)
         }
+        .padding(18)
+        .panel()
+    }
+
+    private func openAsk() {
+        let prompt = model.askText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        model.askText = ""
+        router.openChat(with: prompt)
     }
 }
 
-// MARK: - Bileşenler
-
-struct SummaryTile: View {
+private struct DashboardMetricCard: View {
+    @Environment(\.atakTheme) private var theme
     let value: String
     let label: String
+    let detail: String
     let systemImage: String
     let tint: Color
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tint)
-            Text(value)
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 11))
-    }
-}
-
-struct SuggestionCard: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: "lightbulb")
-                .foregroundStyle(.yellow)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ATAK Önerisi")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(text)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 11))
-    }
-}
-
-/// Basit sarmalayan yerleşim — etiket/çip listeleri için.
-struct FlowRow<Item: Identifiable, Content: View>: View {
-    let items: [Item]
-    @ViewBuilder let content: (Item) -> Content
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                ForEach(items) { content($0) }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(items) { content($0) }
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(value)
+                        .font(theme.numericFont(size: 24, weight: .semibold))
+                        .foregroundStyle(theme.textPrimary)
+                    Text(label)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(theme.textSecondary)
+                    Text(detail)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(theme.textTertiary)
                 }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.textTertiary)
             }
+            .padding(15)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .panel(raised: true)
     }
 }

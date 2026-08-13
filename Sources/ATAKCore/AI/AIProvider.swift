@@ -332,6 +332,92 @@ public enum AIProviderCatalog {
         AIProviderID.allCases.map(info(for:))
     }
 
+    /// Kullanıcı tarafından girilen sunucu adresini güvenlik sınırında doğrular.
+    ///
+    /// API anahtarı kullanan bulut sağlayıcılarında özel adres kapalıdır. Böylece
+    /// bir ayar dosyası elle değiştirilse bile anahtar başka bir sunucuya
+    /// gönderilemez. Ollama anahtar kullanmadığı için özel adres destekler; düz
+    /// HTTP ise yalnızca gerçek loopback adreslerinde kabul edilir.
+    static func validatedBaseURL(
+        for id: AIProviderID,
+        override: String?
+    ) throws -> String {
+        let info = info(for: id)
+        let custom = override?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        if id != .ollama, custom != nil {
+            throw ATAKError.validation(
+                "\(info.displayName) için özel sunucu adresine izin verilmiyor. "
+                + "API anahtarı yalnızca sağlayıcının resmi sunucusuna gönderilebilir."
+            )
+        }
+
+        return try validateURL(custom ?? info.baseURL, for: id)
+    }
+
+    private static func validateURL(_ value: String, for id: AIProviderID) throws -> String {
+        let invalidCharacters = CharacterSet.whitespacesAndNewlines
+            .union(.controlCharacters)
+        let hasInvalidCharacter = value.unicodeScalars.contains {
+            invalidCharacters.contains($0) || $0 == "\\"
+        }
+
+        guard !hasInvalidCharacter,
+              let components = URLComponents(string: value),
+              let url = components.url,
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(),
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil,
+              components.port.map({ (1...65_535).contains($0) }) ?? true
+        else {
+            throw ATAKError.validation(
+                "Sunucu adresi geçersiz. Kullanıcı bilgisi, sorgu ve parça içermeyen tam bir URL girin."
+            )
+        }
+
+        if id == .ollama {
+            if scheme == "http" {
+                // Foundation sürümüne göre `host`, IPv6 köşeli parantezlerini
+                // koruyabilir; iki gösterim de aynı loopback adresidir.
+                let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]
+                guard loopbackHosts.contains(host) else {
+                    throw ATAKError.validation(
+                        "Ollama için HTTP yalnızca localhost, 127.0.0.1 veya [::1] ile kullanılabilir."
+                    )
+                }
+            } else if scheme != "https" {
+                throw ATAKError.validation("Ollama sunucu adresi HTTP veya HTTPS kullanmalıdır.")
+            }
+        } else {
+            let trustedHosts: [AIProviderID: String] = [
+                .gemini: "generativelanguage.googleapis.com",
+                .groq: "api.groq.com",
+                .openRouter: "openrouter.ai",
+                .anthropic: "api.anthropic.com",
+            ]
+            guard scheme == "https",
+                  host == trustedHosts[id],
+                  components.port == nil || components.port == 443
+            else {
+                throw ATAKError.validation(
+                    "\(info(for: id).displayName) yalnızca resmi HTTPS sunucusuyla kullanılabilir."
+                )
+            }
+        }
+
+        // Sağlayıcılar uç nokta yollarını kendileri ekliyor; sondaki eğik çizgi
+        // çift çizgili ve kimi ters vekillerde farklı yorumlanan URL üretmesin.
+        var normalized = url.absoluteString
+        while normalized.hasSuffix("/") { normalized.removeLast() }
+        return normalized
+    }
+
     /// Ayarlardaki yapılandırmadan çalışır bir sağlayıcı üretir.
     public static func makeProvider(
         for id: AIProviderID,
@@ -339,7 +425,7 @@ public enum AIProviderCatalog {
         baseURLOverride: String? = nil
     ) throws -> any AIProvider {
         let info = info(for: id)
-        let base = baseURLOverride?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? info.baseURL
+        let base = try validatedBaseURL(for: id, override: baseURLOverride)
 
         if info.requiresKey, (apiKey?.isEmpty ?? true) {
             throw ATAKError.provider("\(info.displayName) için API anahtarı gerekiyor.")

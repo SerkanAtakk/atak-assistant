@@ -3,16 +3,22 @@ import SwiftUI
 public struct NotesView: View {
 
     @EnvironmentObject private var environment: AppEnvironment
+    @EnvironmentObject private var router: AppRouter
+    @Environment(\.atakTheme) private var theme
     @StateObject private var model = NotesViewModel()
 
     public init() {}
 
     public var body: some View {
-        HStack(spacing: 0) {
-            listColumn
-                .frame(width: 280)
-            Divider()
-            editorColumn
+        VStack(spacing: 0) {
+            header
+            Hairline()
+            HStack(spacing: 0) {
+                listColumn
+                    .frame(width: 300)
+                Rectangle().fill(theme.hairline).frame(width: theme.hairlineWidth)
+                editorColumn
+            }
         }
         .navigationTitle("Notlar")
         .toolbar {
@@ -23,9 +29,11 @@ public struct NotesView: View {
                     Label("Yeni not", systemImage: "square.and.pencil")
                 }
                 .help("Yeni not")
+                .keyboardShortcut("n", modifiers: .command)
             }
         }
-        .task {
+        .task(id: router.section) {
+            guard router.section == .notes else { return }
             model.configure(environment)
             await model.load()
         }
@@ -42,12 +50,34 @@ public struct NotesView: View {
         }
     }
 
+    private var header: some View {
+        HStack(alignment: .center, spacing: 18) {
+            ScreenHeader(
+                "Notlar",
+                subtitle: "Fikirlerini kaydet; Türkçe tam metin aramayla saniyeler içinde bul.",
+                eyebrow: "Bilgi alanı",
+                systemImage: "note.text"
+            )
+            Spacer(minLength: 12)
+            Text("\(model.notes.count) not")
+                .font(theme.labelFont(size: 10.5))
+                .foregroundStyle(theme.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(theme.surfaceRaised, in: Capsule())
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+    }
+
     private var listColumn: some View {
         VStack(spacing: 0) {
             List(selection: $model.selectedID) {
                 ForEach(model.notes) { note in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(note.displayTitle)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(theme.textPrimary)
                             .lineLimit(1)
                         HStack(spacing: 6) {
                             Text(DateFormat.relativeDay(note.updatedAt))
@@ -57,7 +87,7 @@ public struct NotesView: View {
                             }
                         }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.textSecondary)
                     }
                     .padding(.vertical, 2)
                     .tag(note.id)
@@ -69,18 +99,18 @@ public struct NotesView: View {
                 }
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
             .overlay {
                 if model.notes.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "note.text")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.tertiary)
-                        Text(model.searchText.isEmpty
-                             ? "Henüz not yok."
-                             : "Sonuç bulunamadı.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
+                    EmptyStateView(
+                        systemImage: model.searchText.isEmpty ? "note.text" : "magnifyingglass",
+                        title: model.searchText.isEmpty ? "İlk notunu oluştur" : "Sonuç bulunamadı",
+                        message: model.searchText.isEmpty
+                            ? "Toplantı notları, fikirler ve hatırlamak istediklerin burada güvende."
+                            : "Başka bir kelime veya daha kısa bir ifade dene.",
+                        actionTitle: model.searchText.isEmpty ? "Yeni not" : nil,
+                        action: model.searchText.isEmpty ? { Task { await model.addNote() } } : nil
+                    )
                 }
             }
         }
@@ -98,7 +128,7 @@ public struct NotesView: View {
                     .padding(.top, 18)
                     .padding(.bottom, 8)
 
-                Divider().padding(.horizontal, 20)
+                Hairline().padding(.horizontal, 20)
 
                 TextEditor(text: bodyBinding)
                     .font(.body)
@@ -107,11 +137,7 @@ public struct NotesView: View {
                     .padding(.top, 8)
 
                 HStack {
-                    if let draft = model.draft {
-                        Text("Güncellendi: \(DateFormat.full(draft.updatedAt))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+                    saveStatus
                     Spacer()
                     Button("Sil", role: .destructive) {
                         if let id = model.draft?.id {
@@ -122,17 +148,46 @@ public struct NotesView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
+                .background(theme.surface.opacity(0.65))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            VStack(spacing: 10) {
-                Image(systemName: "note.text")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.tertiary)
-                Text("Bir not seç veya yeni not oluştur.")
-                    .foregroundStyle(.secondary)
+            EmptyStateView(
+                systemImage: "sidebar.right",
+                title: "Bir not seç",
+                message: "Listeden bir not seçebilir veya yeni bir sayfa açabilirsin.",
+                actionTitle: "Yeni not",
+                action: { Task { await model.addNote() } }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var saveStatus: some View {
+        switch model.saveState {
+        case .saved:
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(theme.success)
+                Text("Kaydedildi")
+                if let draft = model.draft {
+                    Text("· \(DateFormat.full(draft.updatedAt))")
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .font(.caption2)
+            .foregroundStyle(theme.textTertiary)
+        case .saving:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Kaydediliyor…")
+            }
+            .font(.caption2)
+            .foregroundStyle(theme.textSecondary)
+        case .failed(let message):
+            Label("Kaydedilemedi: \(message)", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundStyle(theme.danger)
+                .lineLimit(1)
         }
     }
 

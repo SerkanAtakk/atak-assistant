@@ -10,6 +10,10 @@
 CONFIG      ?= debug
 APP_NAME    := ATAK
 
+# Boru hattı kullanan tarifler Bash ile çalışır; macOS'taki GNU Make 3.81
+# `.SHELLFLAGS` uygulamadığı için pipefail ilgili tarifte açıkça etkinleştirilir.
+SHELL       := /bin/bash
+
 WORK        := $(HOME)/Library/Developer/ATAK
 SCRATCH     := $(WORK)/build
 BUNDLE      := $(WORK)/$(APP_NAME).app
@@ -47,9 +51,10 @@ bundle: build
 	@echo "✓ $(BUNDLE)"
 
 sign:
+	@test -f Resources/ATAK.entitlements \
+		|| (echo "✗ Resources/ATAK.entitlements bulunamadı"; exit 1)
 	@codesign --force --sign - --timestamp=none \
-		--entitlements Resources/ATAK.entitlements $(BUNDLE) 2>/dev/null \
-		|| codesign --force --sign - $(BUNDLE)
+		--entitlements Resources/ATAK.entitlements $(BUNDLE)
 	@codesign --verify --deep --strict $(BUNDLE) && echo "✓ imza doğrulandı"
 
 run: bundle
@@ -57,10 +62,18 @@ run: bundle
 
 # Pencereyi açmadan başlatma sağlığını doğrular (veritabanı + FTS5 turu).
 smoke: bundle
-	@ATAK_SMOKE=1 $(CONTENTS)/MacOS/$(APP_NAME)
+	@set -o pipefail; \
+		SMOKE_HOME="$$(mktemp -d /private/tmp/atak-smoke.XXXXXX)"; \
+		trap 'rm -rf "$$SMOKE_HOME"' EXIT; \
+		HOME="$$SMOKE_HOME" CFFIXED_USER_HOME="$$SMOKE_HOME" \
+		ATAK_SMOKE=1 $(CONTENTS)/MacOS/$(APP_NAME) 2>&1 \
+		| tee "$(SCRATCH)/smoke.log"
+	@grep -q '^SMOKE_OK$$' "$(SCRATCH)/smoke.log" \
+		|| (echo "✗ Başlatma sağlık kontrolü başarısız"; exit 1)
 
 test:
-	@$(SWIFT) test $(SWIFTFLAGS) 2>&1 | grep -vE "ld: warning: search path"
+	@set -o pipefail; $(SWIFT) test $(SWIFTFLAGS) 2>&1 \
+		| sed '/ld: warning: search path/d'
 
 install: bundle
 	@rm -rf /Applications/$(APP_NAME).app

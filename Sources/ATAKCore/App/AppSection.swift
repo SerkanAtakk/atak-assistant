@@ -42,8 +42,9 @@ public enum AppSection: String, Sendable, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// Kenar çubuğu gruplaması. Sohbet ilk sırada — uygulamanın merkezi o.
+    /// Ana gezinmede yalnız gerçekten çalışan yüzeyler görünür. Yarım ekranlar
+    /// kullanıcıya ürün sözü gibi sunulmaz; hazır olduklarında buraya eklenir.
     public static let primary: [AppSection] = [.chat, .dashboard]
-    public static let work: [AppSection] = [.tasks, .projects, .calendar, .notes]
-    public static let tools: [AppSection] = [.focus, .memory, .settings]
+    public static let work: [AppSection] = [.tasks, .projects, .notes]
+    public static let tools: [AppSection] = [.settings]
 }

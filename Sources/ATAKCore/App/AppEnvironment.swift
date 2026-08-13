@@ -13,7 +13,7 @@ public final class AppEnvironment: ObservableObject {
 
     @Published public private(set) var status: Status = .starting
     @Published public private(set) var aiConfiguration: AIConfiguration = .default
-    @Published public private(set) var themeIdentifier: ATAKTheme.Identifier = .hud
+    @Published public private(set) var themeIdentifier: ATAKTheme.Identifier = .minimal
     @Published public private(set) var voiceSettings: VoiceSettings = .default
     @Published public private(set) var userName: String = UserIdentity.defaultFirstName()
     @Published public var agentState: AgentState = .ready
@@ -28,6 +28,8 @@ public final class AppEnvironment: ObservableObject {
     }
 
     public var theme: ATAKTheme { .theme(for: themeIdentifier) }
+
+    public var isAIReady: Bool { aiConfiguration.isReady }
 
     public private(set) var database: Database?
     public private(set) var tasks: TaskService?

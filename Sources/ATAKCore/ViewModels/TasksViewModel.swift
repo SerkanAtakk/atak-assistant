@@ -50,6 +50,7 @@ public final class TasksViewModel: ObservableObject {
 
     private var taskService: TaskService?
     private var projectService: ProjectService?
+    private weak var router: AppRouter?
     private var reloadTask: Task<Void, Never>?
 
     public init() {}
@@ -58,6 +59,8 @@ public final class TasksViewModel: ObservableObject {
         guard taskService == nil else { return }
         taskService = environment.tasks
         projectService = environment.projects
+        router = environment.router
+        if environment.router.selectedTaskID != nil { filter = .all }
     }
 
     // MARK: - Yükleme
@@ -72,6 +75,12 @@ public final class TasksViewModel: ObservableObject {
             let serviceFilter: TaskFilter = trimmed.isEmpty ? filter.serviceFilter : .search(trimmed)
             tasks = try await taskService.list(serviceFilter)
             projects = try await projectService?.all() ?? []
+
+            if let requested = router?.selectedTaskID,
+               tasks.contains(where: { $0.id == requested }) {
+                selectedID = requested
+                router?.selectedTaskID = nil
+            }
 
             // Seçili görev listeden düştüyse seçimi temizle.
             if let selectedID, !tasks.contains(where: { $0.id == selectedID }) {
